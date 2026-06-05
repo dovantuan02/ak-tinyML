@@ -9,7 +9,7 @@ AK Embedded Base Kit, utilizing STM32L151 chip, is an evaluation kit for advance
 ## Features
 
 - This kit integrates 1.54" Oled LCD, 3 push buttons, and 1 buzzer, which would be sufficient to create a small video game with an event driven paradigm.
-- It also integrates RS485, Qwiic Connect System, and Grove Ecosystems, suitable for prototyping other practical applications in embedded systems.
+- It also includes RS485, Qwiic Connect System, and Grove Ecosystems, suitable for prototyping other practical applications in embedded systems.
 
 ## Purpose
 
