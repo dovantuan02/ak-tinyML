@@ -60,6 +60,7 @@ enum {
 	AC_TASK_POLLING_CONSOLE_ID,
 	AC_TASK_POLLING_ML_ID,
 	AC_TASK_POLLING_MIC_WAVE_ID,
+	AC_TASK_POLLING_ICM_ID,
 	/* EOT polling task ID */
 	AK_TASK_POLLING_EOT_ID,
 };
@@ -100,6 +101,7 @@ extern void task_rf24_demo(ak_msg_t*);
 extern void task_polling_zigbee();
 extern void task_polling_console();
 extern void task_polling_mic_wave();
+extern void task_polling_icm();
 #ifdef __cplusplus
 extern "C" {
 #endif

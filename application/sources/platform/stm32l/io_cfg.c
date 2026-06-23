@@ -18,6 +18,7 @@
 #include "eeprom.h"
 
 #include "system.h"
+#include "ICM_20948_C.h"
 
 //#pragma GCC optimize ("O3")
 
@@ -363,7 +364,7 @@ void io_cfg_adc1(void) {
     NVIC_InitStructure.NVIC_IRQChannelSubPriority = 0;
     NVIC_InitStructure.NVIC_IRQChannelCmd = ENABLE;
     NVIC_Init(&NVIC_InitStructure);
-	TIM_Cmd(TIM6, ENABLE);
+	TIM_Cmd(TIM6, DISABLE);
 }
 
 #ifdef MIC_EN
@@ -806,3 +807,244 @@ void io_rs485_dir_low() {
 void io_rs485_dir_high() {
 	GPIO_SetBits(RS485_DIR_IO_PORT, RS485_DIR_IO_PIN);
 }
+
+/* UART3 - PB10 (USART3_TX), PB11 (USART3_RX), */
+void io_usart3_cfg() {
+	USART_InitTypeDef USART_InitStructure;
+	GPIO_InitTypeDef GPIO_InitStructure;
+	NVIC_InitTypeDef NVIC_InitStructure;
+
+	/* Enable GPIO clock */
+	RCC_AHBPeriphClockCmd(USART3_TX_GPIO_CLK | USART3_RX_GPIO_CLK, ENABLE);
+
+	/* Enable USART clock */
+	RCC_APB1PeriphClockCmd(USART3_CLK, ENABLE);
+
+	/* Connect PXx to USART3_Tx */
+	GPIO_PinAFConfig(USART3_TX_GPIO_PORT, USART3_TX_SOURCE, USART3_TX_AF);
+
+	/* Connect PXx to USART3_Rx */
+	GPIO_PinAFConfig(USART3_RX_GPIO_PORT, USART3_RX_SOURCE, USART3_RX_AF);
+
+	/* Configure USART Tx and Rx as alternate function push-pull */
+	GPIO_InitStructure.GPIO_Mode = GPIO_Mode_AF;
+	GPIO_InitStructure.GPIO_Speed = GPIO_Speed_2MHz;
+	GPIO_InitStructure.GPIO_OType = GPIO_OType_PP;
+	GPIO_InitStructure.GPIO_PuPd = GPIO_PuPd_UP;
+	GPIO_InitStructure.GPIO_Pin = USART3_TX_PIN;
+	GPIO_Init(USART3_TX_GPIO_PORT, &GPIO_InitStructure);
+
+	GPIO_InitStructure.GPIO_Pin = USART3_RX_PIN;
+	GPIO_Init(USART3_RX_GPIO_PORT, &GPIO_InitStructure);
+
+	/* USART3 configuration */
+	USART_InitStructure.USART_BaudRate = 115200;
+	USART_InitStructure.USART_WordLength = USART_WordLength_8b;
+	USART_InitStructure.USART_StopBits = USART_StopBits_1;
+	USART_InitStructure.USART_Parity = USART_Parity_No;
+	USART_InitStructure.USART_HardwareFlowControl = USART_HardwareFlowControl_None;
+	USART_InitStructure.USART_Mode = USART_Mode_Rx | USART_Mode_Tx;
+	USART_Init(USART3, &USART_InitStructure);
+
+	/* Enable the USART3 Interrupt */
+	NVIC_InitStructure.NVIC_IRQChannel = USART3_IRQn;
+	NVIC_InitStructure.NVIC_IRQChannelPreemptionPriority = IRQ_PRIO_UART3_IO;
+	NVIC_InitStructure.NVIC_IRQChannelSubPriority = 0;
+	NVIC_InitStructure.NVIC_IRQChannelCmd = ENABLE;
+	NVIC_Init(&NVIC_InitStructure);
+
+	USART_ClearITPendingBit(USART3, USART_IT_RXNE | USART_IT_TXE);
+	USART_ITConfig(USART3, USART_IT_RXNE, ENABLE);
+	USART_ITConfig(USART3, USART_IT_TXE, DISABLE);
+
+	/* Enable USART */
+	USART_Cmd(USART3, ENABLE);
+}
+
+void io_usart3_putc(uint8_t c) {
+	/* wait last transmission completed */
+	while (USART_GetFlagStatus(USART3, USART_FLAG_TXE) == RESET);
+
+	/* put transnission data */
+	USART_SendData(USART3, (uint8_t)c);
+
+	/* wait transmission completed */
+	while (USART_GetFlagStatus(USART3, USART_FLAG_TC) == RESET);
+}
+
+uint8_t io_usart3_getc() {
+	uint8_t c = 0;
+	while (USART_GetITStatus(USART3, USART_IT_RXNE) == SET) {
+		USART_ClearITPendingBit(USART3, USART_IT_RXNE);
+		c = (uint8_t)USART_ReceiveData(USART3);
+	}
+	return c;
+}
+
+/* I2C - PB6(SCL), PB7(SDA) */
+/**
+ * Ex: use with ICM90248, speed 400000
+ */
+
+static I2C_InitTypeDef i2c1_init;
+
+void io_i2c1_cfg() {
+	GPIO_InitTypeDef GPIO_InitStructure;
+
+	RCC_APB1PeriphClockCmd(RCC_APB1Periph_I2C1, ENABLE);
+	RCC_AHBPeriphClockCmd(RCC_AHBPeriph_GPIOB, ENABLE);
+
+	RCC_APB1PeriphResetCmd(RCC_APB1Periph_I2C1, ENABLE);
+	RCC_APB1PeriphResetCmd(RCC_APB1Periph_I2C1, DISABLE);
+
+	GPIO_PinAFConfig(GPIOB, GPIO_PinSource6, GPIO_AF_I2C1);
+	GPIO_PinAFConfig(GPIOB, GPIO_PinSource7, GPIO_AF_I2C1);
+
+	GPIO_InitStructure.GPIO_Pin = GPIO_Pin_6;
+	GPIO_InitStructure.GPIO_Mode = GPIO_Mode_AF;
+	GPIO_InitStructure.GPIO_Speed = GPIO_Speed_2MHz;
+	GPIO_InitStructure.GPIO_OType = GPIO_OType_OD;
+	GPIO_InitStructure.GPIO_PuPd = GPIO_PuPd_NOPULL;
+	GPIO_Init(GPIOB, &GPIO_InitStructure);
+
+	GPIO_InitStructure.GPIO_Pin = GPIO_Pin_7;
+	GPIO_Init(GPIOB, &GPIO_InitStructure);
+
+	i2c1_init.I2C_Mode = I2C_Mode_I2C;
+	i2c1_init.I2C_DutyCycle = I2C_DutyCycle_2;
+	i2c1_init.I2C_OwnAddress1 = 0x00;
+	i2c1_init.I2C_Ack = I2C_Ack_Enable;
+	i2c1_init.I2C_AcknowledgedAddress = I2C_AcknowledgedAddress_7bit;
+	i2c1_init.I2C_ClockSpeed = 100000;
+
+	I2C_Cmd(I2C1, ENABLE);
+	I2C_Init(I2C1, &i2c1_init);
+}
+
+static void i2c1_stop_and_recover() {
+	uint32_t sr1 = I2C1->SR1;
+	if (sr1 & I2C_SR1_ARLO) {
+		volatile uint32_t _sr2 = I2C1->SR2; (void)_sr2;
+	}
+	if (sr1 & I2C_SR1_OVR) {
+		volatile uint32_t _dr = I2C1->DR; (void)_dr;
+	}
+
+	I2C_GenerateSTOP(I2C1, ENABLE);
+	uint32_t t = 10000;
+	while (I2C_GetFlagStatus(I2C1, I2C_FLAG_BUSY)) {
+		if (--t == 0) {
+			/* BUSY stuck — reset I2C peripheral state machine + re-init */
+			I2C_Cmd(I2C1, DISABLE);
+			I2C1->CR1 |= I2C_CR1_SWRST;
+			I2C1->CR1 &= ~I2C_CR1_SWRST;
+			I2C_Cmd(I2C1, ENABLE);
+			I2C_Init(I2C1, &i2c1_init);
+			break;
+		}
+	}
+}
+
+int io_i2c1_write(uint8_t address, uint8_t reg, uint8_t *data, uint32_t len) {
+	uint32_t timeout = 10000;
+
+	uint32_t _sr1 = I2C1->SR1;
+	if (_sr1 & I2C_SR1_ARLO) { volatile uint32_t _sr2 = I2C1->SR2; (void)_sr2; }
+	if (_sr1 & I2C_SR1_OVR) { volatile uint32_t _dr = I2C1->DR; (void)_dr; }
+
+	while (I2C_GetFlagStatus(I2C1, I2C_FLAG_BUSY)) {
+		if (--timeout == 0) { i2c1_stop_and_recover(); return -1; }
+	}
+
+	I2C_GenerateSTART(I2C1, ENABLE);
+	timeout = 10000;
+	while (!I2C_CheckEvent(I2C1, I2C_EVENT_MASTER_MODE_SELECT)) {
+		if (--timeout == 0) { i2c1_stop_and_recover(); return -2; }
+	}
+
+	I2C_Send7bitAddress(I2C1, address << 1, I2C_Direction_Transmitter);
+	timeout = 10000;
+	while (!I2C_CheckEvent(I2C1, I2C_EVENT_MASTER_TRANSMITTER_MODE_SELECTED)) {
+		if (--timeout == 0) { i2c1_stop_and_recover(); return -3; }
+	}
+	if (I2C_GetFlagStatus(I2C1, I2C_FLAG_AF)) {
+		i2c1_stop_and_recover(); return -31;
+	}
+
+	I2C_SendData(I2C1, reg);
+	timeout = 10000;
+	while (!I2C_CheckEvent(I2C1, I2C_EVENT_MASTER_BYTE_TRANSMITTED)) {
+		if (I2C_GetFlagStatus(I2C1, I2C_FLAG_AF)) { i2c1_stop_and_recover(); return -4; }
+		if (--timeout == 0) { i2c1_stop_and_recover(); return -4; }
+	}
+	if (I2C_GetFlagStatus(I2C1, I2C_FLAG_AF)) { i2c1_stop_and_recover(); return -4; }
+
+	while (len--) {
+		I2C_SendData(I2C1, *data++);
+		timeout = 10000;
+		while (!I2C_CheckEvent(I2C1, I2C_EVENT_MASTER_BYTE_TRANSMITTED)) {
+			if (I2C_GetFlagStatus(I2C1, I2C_FLAG_AF)) { i2c1_stop_and_recover(); return -5; }
+			if (--timeout == 0) { i2c1_stop_and_recover(); return -5; }
+		}
+		if (I2C_GetFlagStatus(I2C1, I2C_FLAG_AF)) { i2c1_stop_and_recover(); return -5; }
+	}
+
+	I2C_GenerateSTOP(I2C1, ENABLE);
+
+	return 0;
+}
+
+int io_i2c1_read_raw(uint8_t address, uint8_t *buff, uint32_t len) {
+	uint32_t timeout = 10000;
+	uint32_t remaining = len;
+
+	if (len == 0) return 0;
+
+	/* Purge stale error flags before starting */
+	uint32_t _sr1 = I2C1->SR1;
+	if (_sr1 & I2C_SR1_ARLO) { volatile uint32_t _sr2 = I2C1->SR2; (void)_sr2; }
+	if (_sr1 & I2C_SR1_OVR) { volatile uint32_t _dr = I2C1->DR; (void)_dr; }
+
+	while (I2C_GetFlagStatus(I2C1, I2C_FLAG_BUSY)) {
+		if (--timeout == 0) { i2c1_stop_and_recover(); return -1; }
+	}
+
+	I2C_GenerateSTART(I2C1, ENABLE);
+	timeout = 10000;
+	while (!I2C_CheckEvent(I2C1, I2C_EVENT_MASTER_MODE_SELECT)) {
+		if (--timeout == 0) { i2c1_stop_and_recover(); return -2; }
+	}
+
+	I2C_Send7bitAddress(I2C1, address << 1, I2C_Direction_Receiver);
+	timeout = 10000;
+	while (!I2C_CheckEvent(I2C1, I2C_EVENT_MASTER_RECEIVER_MODE_SELECTED)) {
+		if (--timeout == 0) { i2c1_stop_and_recover(); return -3; }
+	}
+	if (I2C_GetFlagStatus(I2C1, I2C_FLAG_AF)) {
+		i2c1_stop_and_recover(); return -31;
+	}
+
+	while (remaining) {
+		if (remaining == 1) {
+			I2C_AcknowledgeConfig(I2C1, DISABLE);
+			I2C_GenerateSTOP(I2C1, ENABLE);
+		}
+		timeout = 100000;
+		while (!I2C_GetFlagStatus(I2C1, I2C_FLAG_RXNE)) {
+			if (I2C_GetFlagStatus(I2C1, I2C_FLAG_AF)) {
+				if (remaining > 1) i2c1_stop_and_recover();
+				I2C_AcknowledgeConfig(I2C1, ENABLE); return -4;
+			}
+			if (--timeout == 0) {
+				if (remaining > 1) i2c1_stop_and_recover();
+				I2C_AcknowledgeConfig(I2C1, ENABLE); return -4;
+			}
+		}
+		*buff++ = I2C_ReceiveData(I2C1);
+		remaining--;
+	}
+
+	I2C_AcknowledgeConfig(I2C1, ENABLE);
+	return len;
+}
+

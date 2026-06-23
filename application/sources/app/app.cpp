@@ -43,6 +43,7 @@
 #include "task_uart_if.h"
 #include "task_display.h"
 #include "task_zigbee.h"
+#include "task_icm.h"
 
 /* sys include */
 #include "sys_boot.h"
@@ -265,6 +266,8 @@ int main_app() {
 	}
 #endif
 
+	icm90248_init();
+
 	/* start timer for application */
 	app_init_state_machine();
 	app_start_timer();
@@ -341,6 +344,9 @@ void task_polling_console() {
 	}
 }
 
+void task_polling_icm() {
+}
+
 /*****************************************************************************/
 /* app initial function.
  */
@@ -385,6 +391,20 @@ void sys_irq_timer_10ms() {
 	button_timer_polling(&btn_mode);
 	button_timer_polling(&btn_up);
 	button_timer_polling(&btn_down);
+}
+
+void sys_irq_timer_100ms() {
+	extern ICM_20948_Device_t myICM;
+	ICM_20948_AGMT_t agmt = {{0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {0}};
+	if (ICM_20948_get_agmt(&myICM, &agmt) == ICM_20948_Stat_Ok) {
+		APP_DBG("RAW. Acc: [%d, %d, %d] - Gyro[%d, %d, %d] - Mag[%d, %d, %d]\n", 
+			agmt.acc.axes.x, agmt.acc.axes.y, agmt.acc.axes.z,
+			agmt.gyr.axes.x, agmt.gyr.axes.y, agmt.gyr.axes.z,
+			agmt.mag.axes.x, agmt.mag.axes.y, agmt.mag.axes.z);
+	}
+	else {
+		APP_DBG("Read failed !\n");
+	}
 }
 
 /* init non-clear RAM objects

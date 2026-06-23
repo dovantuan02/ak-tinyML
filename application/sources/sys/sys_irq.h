@@ -14,6 +14,7 @@ extern void sys_irq_nrf24l01();
 extern void sys_irq_shell();
 extern void sys_irq_uart2();
 extern void sys_irq_timer_10ms();
+extern void sys_irq_timer_100ms();
 
 #ifdef __cplusplus
 }
