@@ -30,8 +30,10 @@ bool accel_ring_buffer_push(accel_ring_buffer_t *rb, int8_t x, int8_t y, int8_t 
 bool accel_ring_buffer_full(accel_ring_buffer_t *rb);
 uint32_t accel_ring_buffer_count(accel_ring_buffer_t *rb);
 void accel_ring_buffer_reset(accel_ring_buffer_t *rb);
-
-int32_t accel_predict_impact(accel_ring_buffer_t *rb);
+void accel_ring_bufffer_get(accel_ring_buffer_t *rb, accel_sample_t *accel_buff);
+void accel_ring_bufffer_get_x(accel_ring_buffer_t *rb, int8_t *x_buff, int len);
+void accel_ring_bufffer_get_y(accel_ring_buffer_t *rb, int8_t *y_buff, int len);
+void accel_ring_bufffer_get_z(accel_ring_buffer_t *rb, int8_t *z_buff, int len);
 
 #ifdef __cplusplus
 }

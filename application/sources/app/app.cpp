@@ -43,7 +43,6 @@
 #include "task_uart_if.h"
 #include "task_display.h"
 #include "task_zigbee.h"
-#include "task_icm.h"
 
 /* sys include */
 #include "sys_boot.h"
@@ -60,7 +59,9 @@
 
 /* common include */
 #include "screen_manager.h"
+#include "utils.h"
 
+#include "nn_infer.h"
 /* ----------------------- Platform includes --------------------------------*/
 
 /* ----------------------- Modbus includes ----------------------------------*/
@@ -76,14 +77,16 @@
 
 #include "Wire.h"
 #include "ICM_20948.h"
-#include "random_forest_impact_detector.h"
 #include "accel_ring_buffer.h"
 
 static accel_ring_buffer_t accel_rb;
-static volatile bool accel_data_ready = false;
 ICM_20948_I2C myICMi2c;
+static volatile bool accel_data_ready = false;
 static volatile bool isInited = false;
 
+mic_pcm_t mic_pcm;
+
+static NNInfer *infer;
 /* ----------------------- Json includes ------------------------------------*/
 //#include "json.hpp"
 
@@ -103,7 +106,7 @@ const app_info_t app_info { \
 			APP_VER, \
 };
 
-mic_pcm_t mic_pcm;
+
 static boot_app_share_data_t boot_app_share_data;
 
 static void app_power_on_reset();
@@ -357,6 +360,11 @@ int main_app() {
 	else {
 		APP_DBG("Enable DMP failed!\n");
 	}
+
+	infer = new NNInfer(ImpactDetect);
+	if (!infer) {
+		APP_DBG("Allocate NN failed !\n");
+	}
 	/* start timer for application */
 	app_init_state_machine();
 	app_start_timer();
@@ -438,8 +446,10 @@ void task_polling_icm() {
 
 void task_polling_ml() {
 	if (accel_data_ready) {
-		int32_t result = accel_predict_impact(&accel_rb);
-
+		// int32_t result = accel_predict_impact(&accel_rb);		
+		int8_t z_buff[ACCEL_BUFFER_SIZE];
+		accel_ring_bufffer_get_z(&accel_rb, z_buff, ACCEL_BUFFER_SIZE);
+		infer->inference((void*)z_buff, ACCEL_BUFFER_SIZE);
 		ENTRY_CRITICAL();
 		accel_ring_buffer_reset(&accel_rb);
 		accel_data_ready = false;
@@ -488,10 +498,6 @@ void app_task_init() {
  * used for led, button polling
  */
 
-int8_t convert_int16_to_int8(int16_t in) {
-    return (int8_t)((int32_t)in * 127 / 32768);
-}
-
 void sys_irq_timer_10ms() {
 	button_timer_polling(&btn_mode);
 	button_timer_polling(&btn_up);
@@ -505,13 +511,13 @@ void sys_irq_timer_10ms() {
 		{
 			if ((data.header & DMP_header_bitmap_Accel) > 0)
 			{
-				int8_t acc_x = convert_int16_to_int8(data.Raw_Accel.Data.X);
-				int8_t acc_y = convert_int16_to_int8(data.Raw_Accel.Data.Y);
-				int8_t acc_z = convert_int16_to_int8(data.Raw_Accel.Data.Z);
+				int8_t acc_x = int16_to_int8(data.Raw_Accel.Data.X);
+				int8_t acc_y = int16_to_int8(data.Raw_Accel.Data.Y);
+				int8_t acc_z = int16_to_int8(data.Raw_Accel.Data.Z);
 
-				// xfprintf((void(*)(int))io_usart3_putc, "%d\n", acc_z);
+				xfprintf((void(*)(int))io_usart3_putc, "%d\n", acc_z);
 				accel_ring_buffer_push(&accel_rb, acc_x, acc_y, acc_z);
-				if (accel_ring_buffer_full(&accel_rb) && !accel_data_ready){
+				if (accel_ring_buffer_full(&accel_rb) && !accel_data_ready) {
 					accel_data_ready = true;
 				}
 			}

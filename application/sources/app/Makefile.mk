@@ -1,6 +1,5 @@
 include sources/app/screens/Makefile.mk
 include sources/app/nn/Makefile.mk
-include sources/app/model/Makefile.mk
 # include sources/app/mic/Makefile.mk
 
 CFLAGS		+= -I./sources/app
