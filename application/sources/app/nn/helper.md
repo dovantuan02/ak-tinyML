@@ -1,0 +1,1 @@
+edge-impulse-data-forwarder --serial-port /dev/ttyUSB1 --baud-rate 115200

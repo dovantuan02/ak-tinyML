@@ -288,13 +288,6 @@ extern void io_rs485_dir_mode_output();
 extern void io_rs485_dir_low();
 extern void io_rs485_dir_high();
 
-/******************************************************************************
- * I2C1 function - PB6(SCL), PB7(SDA)
- *******************************************************************************/
-extern void io_i2c1_cfg(void);
-extern int io_i2c1_write(uint8_t address, uint8_t reg, uint8_t *data, uint32_t len);
-extern int io_i2c1_read_raw(uint8_t address, uint8_t *buff, uint32_t len);
-
 #ifdef __cplusplus
 }
 #endif

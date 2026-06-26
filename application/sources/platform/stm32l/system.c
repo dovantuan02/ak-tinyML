@@ -290,7 +290,6 @@ void reset_handler() {
 
 	/* entry app function */
 
-	io_i2c1_cfg();
 	main_app();
 }
 
@@ -353,7 +352,6 @@ void usage_fault_handler() {
 /*******************************************/
 void systick_handler() {
 	static uint32_t div_counter = 0;
-	static uint8_t count10ms = 0;
 	task_entry_interrupt();
 
 	/* increasing millis counter */
@@ -363,16 +361,11 @@ void systick_handler() {
 
 	if (div_counter == 10) {
 		div_counter = 0;
-		count10ms++;
 	}
 
 	switch (div_counter) {
 	case 0:
 		sys_irq_timer_10ms();
-		if (count10ms == 10) {
-			sys_irq_timer_100ms();
-			count10ms = 0;
-		}
 		break;
 
 	default:

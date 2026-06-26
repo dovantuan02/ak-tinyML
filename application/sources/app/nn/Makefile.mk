@@ -1,8 +1,8 @@
-CFLAGS		+= -I./sources/app/nn -I./sources/app/screens -I./sources/driver/Adafruit_oled_drv
-CPPFLAGS	+= -I./sources/app/nn -I./sources/app/screens -I./sources/driver/Adafruit_oled_drv
+CFLAGS		+= -I./sources/app/nn
+CPPFLAGS	+= -I./sources/app/nn
+
 
 VPATH += sources/app/nn
 
 # CPP source files
-SOURCES += sources/app/nn/BitNetMCU.c
-SOURCES += sources/app/nn/BitNetMCU_inference.c
+# SOURCES_CPP += sources/app/nn/tflm_inference.cpp
