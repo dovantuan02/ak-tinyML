@@ -19,7 +19,7 @@ const task_t app_task_table[] = {
 	{AC_TASK_UART_IF_ID			,	TASK_PRI_LEVEL_4	,	task_uart_if		},
 	{AC_TASK_DBG_ID				,	TASK_PRI_LEVEL_4	,	task_dbg			},
 	{AC_TASK_DISPLAY_ID			,	TASK_PRI_LEVEL_4	,	task_display		},
-
+	{AC_TASK_ACCEL_ID			, 	TASK_PRI_LEVEL_4	, 	task_accel			},
 	#if defined(TASK_ZIGBEE_EN)
 	{AC_TASK_ZIGBEE_ID			,	TASK_PRI_LEVEL_4	,	task_zigbee			},
 	#endif
@@ -53,6 +53,5 @@ const task_polling_t app_task_polling_table[] = {
 	{AC_TASK_POLLING_CONSOLE_ID	,	AK_ENABLE	,	task_polling_console		},
 	{AC_TASK_POLLING_ML_ID		, 	AK_ENABLE	, 	task_polling_ml				},
 	{AC_TASK_POLLING_MIC_WAVE_ID, 	AK_DISABLE	, 	task_polling_mic_wave		},
-	{AC_TASK_POLLING_ICM_ID		, 	AK_ENABLE	, 	task_polling_icm		},
 	{AK_TASK_POLLING_EOT_ID		,	AK_DISABLE	,	(pf_task_polling)0			},
 };

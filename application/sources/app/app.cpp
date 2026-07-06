@@ -43,6 +43,7 @@
 #include "task_uart_if.h"
 #include "task_display.h"
 #include "task_zigbee.h"
+#include "task_accel_sensor.h"
 
 /* sys include */
 #include "sys_boot.h"
@@ -76,13 +77,6 @@
 #include "mic.h"
 
 #include "Wire.h"
-#include "ICM_20948.h"
-#include "accel_ring_buffer.h"
-
-static accel_ring_buffer_t accel_rb;
-ICM_20948_I2C myICMi2c;
-static volatile bool accel_data_ready = false;
-static volatile bool isInited = false;
 
 mic_pcm_t mic_pcm;
 
@@ -278,88 +272,6 @@ int main_app() {
 		APP_PRINT("NG\n");
 	}
 #endif
-	isInited = false;
-	// icm90248_init();
-	Wire.begin();
-	// Wire.setTimeout(10000);
-	myICMi2c.begin(Wire, true);
-	while (myICMi2c.status != ICM_20948_Stat_Ok){
-		myICMi2c.begin(Wire, true);
-		APP_DBG("Sensor init: %s\n", myICMi2c.statusString());
-		sys_ctrl_delay_ms(100);
-	}
-	APP_DBG("Sensor init: %s\n", myICMi2c.statusString());
-
-	bool success = true; // Use success to show if the DMP configuration was successful
-
-	Wire.setClock(50000);
-  	// Initialize the DMP. initializeDMP is a weak function. You can overwrite it if you want to e.g. to change the sample rate
-  	success &= (myICMi2c.initializeDMP() == ICM_20948_Stat_Ok);
-	if (!success) {
-		APP_DBG("Init DMP failed !\n");
-	}
-	// DMP sensor options are defined in ICM_20948_DMP.h
-	//    INV_ICM20948_SENSOR_ACCELEROMETER               (16-bit accel)
-	//    INV_ICM20948_SENSOR_GYROSCOPE                   (16-bit gyro + 32-bit calibrated gyro)
-	//    INV_ICM20948_SENSOR_RAW_ACCELEROMETER           (16-bit accel)
-	//    INV_ICM20948_SENSOR_RAW_GYROSCOPE               (16-bit gyro + 32-bit calibrated gyro)
-	//    INV_ICM20948_SENSOR_MAGNETIC_FIELD_UNCALIBRATED (16-bit compass)
-	//    INV_ICM20948_SENSOR_GYROSCOPE_UNCALIBRATED      (16-bit gyro)
-	//    INV_ICM20948_SENSOR_STEP_DETECTOR               (Pedometer Step Detector)
-	//    INV_ICM20948_SENSOR_STEP_COUNTER                (Pedometer Step Detector)
-	//    INV_ICM20948_SENSOR_GAME_ROTATION_VECTOR        (32-bit 6-axis quaternion)
-	//    INV_ICM20948_SENSOR_ROTATION_VECTOR             (32-bit 9-axis quaternion + heading accuracy)
-	//    INV_ICM20948_SENSOR_GEOMAGNETIC_ROTATION_VECTOR (32-bit Geomag RV + heading accuracy)
-	//    INV_ICM20948_SENSOR_GEOMAGNETIC_FIELD           (32-bit calibrated compass)
-	//    INV_ICM20948_SENSOR_GRAVITY                     (32-bit 6-axis quaternion)
-	//    INV_ICM20948_SENSOR_LINEAR_ACCELERATION         (16-bit accel + 32-bit 6-axis quaternion)
-	//    INV_ICM20948_SENSOR_ORIENTATION                 (32-bit 9-axis quaternion + heading accuracy)
-
-	// Enable the DMP accelerometer
-	success &= (myICMi2c.enableDMPSensor(INV_ICM20948_SENSOR_ACCELEROMETER) == ICM_20948_Stat_Ok);
-	if (!success) {
-		APP_DBG("Enable DMP sensor failed !\n");
-	}
-	// Configuring DMP to output data at multiple ODRs:
-	// DMP is capable of outputting multiple sensor data at different rates to FIFO.
-	// Setting value can be calculated as follows:
-	// Value = (DMP running rate / ODR ) - 1
-	// E.g. For a 5Hz ODR rate when DMP is running at 55Hz, value = (55/5) - 1 = 10.
-	success &= (myICMi2c.setDMPODRrate(DMP_ODR_Reg_Accel, 0) == ICM_20948_Stat_Ok); // Set to the maximum
-	if (!success) {
-		APP_DBG("set baudrate DMP failed !\n");
-	}
-	// Enable the FIFO
-	success &= (myICMi2c.enableFIFO() == ICM_20948_Stat_Ok);
-	if (!success) {
-		APP_DBG("enable fifo DMP failed !\n");
-	}
-	// Enable the DMP
-	success &= (myICMi2c.enableDMP() == ICM_20948_Stat_Ok);
-	if (!success) {
-		APP_DBG("enable DMP failed !\n");
-	}
-	// Reset DMP
-	success &= (myICMi2c.resetDMP() == ICM_20948_Stat_Ok);
-	if (!success) {
-		APP_DBG("reset DMP failed !\n");
-	}
-	// Reset FIFO
-	success &= (myICMi2c.resetFIFO() == ICM_20948_Stat_Ok);
-	if (!success) {
-		APP_DBG("reset FIFO DMP failed !\n");
-	}
-	// Check success
-	if (success) {
-		APP_DBG("DMP enabled!\n");
-		// Wire.setClock(400000);
-		Wire.setTimeout(500);
-		isInited = true;
-		accel_ring_buffer_init(&accel_rb);
-	}
-	else {
-		APP_DBG("Enable DMP failed!\n");
-	}
 
 	infer = new NNInfer(ImpactDetect);
 	if (!infer) {
@@ -441,20 +353,17 @@ void task_polling_console() {
 	}
 }
 
-void task_polling_icm() {
-}
-
 void task_polling_ml() {
-	if (accel_data_ready) {
-		// int32_t result = accel_predict_impact(&accel_rb);		
-		int8_t z_buff[ACCEL_BUFFER_SIZE];
-		accel_ring_bufffer_get_z(&accel_rb, z_buff, ACCEL_BUFFER_SIZE);
-		infer->inference((void*)z_buff, ACCEL_BUFFER_SIZE);
-		ENTRY_CRITICAL();
-		accel_ring_buffer_reset(&accel_rb);
-		accel_data_ready = false;
-		EXIT_CRITICAL();
-	}
+	// if (accel_data_ready) {
+	// 	// int32_t result = accel_predict_impact(&accel_rb);		
+	// 	int8_t z_buff[ACCEL_BUFFER_SIZE];
+	// 	accel_ring_bufffer_get_z(&accel_rb, z_buff, ACCEL_BUFFER_SIZE);
+	// 	infer->inference((void*)z_buff, ACCEL_BUFFER_SIZE);
+	// 	ENTRY_CRITICAL();
+	// 	accel_ring_buffer_reset(&accel_rb);
+	// 	accel_data_ready = false;
+	// 	EXIT_CRITICAL();
+	// }
 }
 
 /*****************************************************************************/
@@ -487,6 +396,7 @@ void app_task_init() {
 
 	task_post_pure_msg(AC_TASK_RF24_IF_ID, AC_RF24_IF_INIT_NETWORK);
 	task_post_pure_msg(AC_TASK_UART_IF_ID, AC_UART_IF_INIT);
+	task_post_pure_msg(AC_TASK_ACCEL_ID, AC_ACCEL_INIT);
 }
 
 /*****************************************************************************/
@@ -503,26 +413,7 @@ void sys_irq_timer_10ms() {
 	button_timer_polling(&btn_up);
 	button_timer_polling(&btn_down);
 
-	if (isInited == true) {
-		icm_20948_DMP_data_t data;
-		myICMi2c.readDMPdataFromFIFO(&data);
-
-		if ((myICMi2c.status == ICM_20948_Stat_Ok) || (myICMi2c.status == ICM_20948_Stat_FIFOMoreDataAvail))
-		{
-			if ((data.header & DMP_header_bitmap_Accel) > 0)
-			{
-				int8_t acc_x = int16_to_int8(data.Raw_Accel.Data.X);
-				int8_t acc_y = int16_to_int8(data.Raw_Accel.Data.Y);
-				int8_t acc_z = int16_to_int8(data.Raw_Accel.Data.Z);
-
-				xfprintf((void(*)(int))io_usart3_putc, "%d\n", acc_z);
-				accel_ring_buffer_push(&accel_rb, acc_x, acc_y, acc_z);
-				if (accel_ring_buffer_full(&accel_rb) && !accel_data_ready) {
-					accel_data_ready = true;
-				}
-			}
-		}
-	}
+	accel_timer_polling(accel_sensor);
 }
 
 /* init non-clear RAM objects
