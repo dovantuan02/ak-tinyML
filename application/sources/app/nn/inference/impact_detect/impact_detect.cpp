@@ -5,7 +5,7 @@
 #include "sys_ctrl.h"
 #include "app_dbg.h"
 #include "impact_detect.h"
-#include "random_forest_impact_detector_1axis.h"
+#include "model/random_forest_impact_detector_1axis.h"
 
 ImpactInfer::ImpactInfer(/* args */) {
     for (int i = 0; i < FEATURE_LEN; i++) {

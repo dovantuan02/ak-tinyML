@@ -4,6 +4,7 @@
 
 enum eModelName {
     ImpactDetect,
+    AnomalyDetect,
 };
 
 class NNInfer

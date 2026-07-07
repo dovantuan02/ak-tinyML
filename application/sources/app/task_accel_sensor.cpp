@@ -150,24 +150,26 @@ void accel_timer_polling(Accel_t accel)
                 x = CONVERT_G_TO_MS2((float)data.Raw_Accel.Data.X);
                 y = CONVERT_G_TO_MS2((float)data.Raw_Accel.Data.Y);
                 z = CONVERT_G_TO_MS2((float)data.Raw_Accel.Data.Z);
-            }
 
-            struct icm_data_internal_t icm_data = {
+                #if 0
+                xfprintf((void (*)(int))sys_ctrl_shell_put_char, "%.1f,%.1f,%.1f\n", x, y, z);
+                #else
+                struct icm_data_internal_t icm_data = {
                 .acc_x = data.Raw_Accel.Data.X,
                 .acc_y = data.Raw_Accel.Data.Y,
                 .acc_z = data.Raw_Accel.Data.Z,
                 .gyro_x = 0,
                 .gyro_y = 0,
                 .gyro_z = 0
-            };
-            if (!ring_buffer_is_full(&accel_sensor.sample_buff)) {
-                ring_buffer_put(&accel_sensor.sample_buff, &icm_data);
-                APP_DBG("Put data to ring buffer: %d bytes, ringAvail: %d\n", sizeof(icm_data), ring_buffer_availble(&accel_sensor.sample_buff));
+                };
+                if (!ring_buffer_is_full(&accel_sensor.sample_buff)) {
+                    ring_buffer_put(&accel_sensor.sample_buff, &icm_data);
+                    // APP_DBG("Put data to ring buffer: %d bytes, ringAvail: %d\n", sizeof(icm_data), ring_buffer_availble(&accel_sensor.sample_buff));
+                }
+                #endif
             }
-            else {
-                ring_buffer_get(&accel_sensor.sample_buff, &icm_data);
-                xfprintf((void (*)(int))sys_ctrl_shell_put_char, "%0.1f,%0.1f,%0.1f\n", (float)icm_data.acc_x, (float)icm_data.acc_y, (float)icm_data.acc_z);
-            }
+
+            
         }
         else
         {

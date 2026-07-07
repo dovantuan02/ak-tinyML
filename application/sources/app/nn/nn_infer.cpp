@@ -2,6 +2,8 @@
 
 #include "nn_infer.h"
 #include "impact_detect.h"
+#include "anomal_detect.h"
+
 NNInfer::NNInfer(enum eModelName model) {
     modelName = model;
     switch (model)
@@ -9,7 +11,9 @@ NNInfer::NNInfer(enum eModelName model) {
     case ImpactDetect:
         infer = new ImpactInfer();
         break;
-    
+    case AnomalyDetect:
+        infer = new AnomalyInfer();
+        break;
     default:
         break;
     }
@@ -19,8 +23,20 @@ NNInfer::NNInfer(enum eModelName model) {
 NNInfer::~NNInfer() {
     APP_DBG("Free NN: %08X\n", (unsigned int)infer);
     if (infer) {
-        ImpactInfer *p = static_cast<ImpactInfer*>(infer);
-        delete p;
+        switch (modelName) {
+        case ImpactDetect: {
+            ImpactInfer *p = static_cast<ImpactInfer*>(infer);
+            delete p;
+            break;
+        }
+        case AnomalyDetect: {
+            AnomalyInfer *p = static_cast<AnomalyInfer*>(infer);
+            delete p;
+            break;
+        }
+        default:
+            break;
+        }
     }
 }
 
@@ -32,7 +48,8 @@ int NNInfer::inference(void *data, uint32_t len) {
     switch (modelName) {
     case ImpactDetect:
         return ((ImpactInfer*)infer)->inference(data, len);
-    
+    case AnomalyDetect:
+        return ((AnomalyInfer*)infer)->inference(data, len);
     default:
         break;
     }

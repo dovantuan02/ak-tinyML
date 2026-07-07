@@ -1,0 +1,314 @@
+#include <stdint.h>
+#include <math.h>
+#include <stdlib.h>
+#include <string.h>
+
+#include <eml_fft.h>
+
+#include "sys_ctrl.h"
+#include "app_dbg.h"
+#include "anomal_detect.h"
+#include "model/anomal_detection_v1.h"
+
+#define AXES (3)
+#define SCALE_AXES (0.2f)  /* applied AFTER CONVERT_G_TO_MS2 */
+#define FILTER_CUTOFF (3.0f)
+#define SAMPLING_FREQ (58.0f)
+#define RAW_SAMPLES_PER_AXIS (116)
+#define FFT_LENGTH (16)
+#define FFT_OVERLAP (FFT_LENGTH / 2)
+#define NUM_BINS (FFT_LENGTH / 2 + 1)
+#define STRIDE (FFT_LENGTH - FFT_OVERLAP)
+#define ELEMENT_STRIDE 3
+
+#define S2 13.5f
+#define PSD_SCALE (1.0f / (SAMPLING_FREQ * S2))
+#define CONVERT_G_TO_MS2(x) ((x) * 9.80665f)
+
+/* StandardScaler normalization from training notebook
+   To update: run notebook and copy scaler.mean_ / scaler.scale_ values)
+   NOTE: scale = 1/std (inverse std), so formula: norm = (feature - mean) * scale */
+static const float NORM_MEAN[FEATURE_LEN] = { 673.8051f, -0.2186f, 0.1686f, 2.4455f, 4.0375f, 4.6634f, 2094.2317f, 0.4336f, 0.4695f, 2.4397f, 4.0200f, 5.4251f, 4572.1592f, -1.9544f, 2.9985f, 2.4415f, 4.0257f, 6.7278f };
+static const float NORM_SCALE[FEATURE_LEN] = { 0.002215f, 1.088804f, 0.699978f, 69.897835f, 22.677576f, 0.936788f, 0.000495f, 0.873590f, 0.474650f, 78.085106f, 25.289017f, 1.047305f, 0.001687f, 1.688269f, 0.626388f, 193.082199f, 63.170059f, 12.729128f };
+
+static const float SOS_COEFFS[3][6] = {
+    {1.0326097345e-05f, 2.0652194690e-05f, 1.0326097345e-05f, 1.0f, -1.4485440706e+00f, 5.2855930280e-01f},
+    {1.0f, 2.0f, 1.0f, 1.0f, -1.5462039793e+00f, 6.3161378691e-01f},
+    {1.0f, 2.0f, 1.0f, 1.0f, -1.7506318227e+00f, 8.4733389384e-01f},
+};
+
+static const float WINDOW[FFT_LENGTH] = {
+    0.0f, 0.5f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f,
+    1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 0.5f};
+
+AnomalyInfer::AnomalyInfer()
+{
+    for (int i = 0; i < FEATURE_LEN; i++)
+    {
+        features[i] = 0.0f;
+    }
+    memset(filter_state, 0, sizeof(filter_state));
+
+    EmlFFT table;
+    table.length = FFT_LENGTH / 2;
+    table.cos = fft_cos;
+    table.sin = fft_sin;
+    tables_ready = (eml_fft_fill(table, FFT_LENGTH) == EmlOk);
+}
+
+AnomalyInfer::~AnomalyInfer()
+{
+}
+
+static float process_biquad(float x, float state[2], const float coeffs[6])
+{
+    float y = coeffs[0] * x + state[0];
+    state[0] = coeffs[1] * x - coeffs[4] * y + state[1];
+    state[1] = coeffs[2] * x - coeffs[5] * y;
+    return y;
+}
+
+static void apply_filter(float *buf, uint32_t n, float state[3][2])
+{
+    for (uint32_t i = 0; i < n; i++)
+    {
+        float x = buf[i];
+        for (int s = 0; s < 3; s++)
+        {
+            x = process_biquad(x, state[s], SOS_COEFFS[s]);
+        }
+        buf[i] = x;
+    }
+}
+
+static void compute_psd_maxhold(const float *buf, uint32_t n,
+                                const EmlFFT *fft_table,
+                                float psd_out[NUM_BINS])
+{
+    for (int k = 0; k < NUM_BINS; k++)
+    {
+        psd_out[k] = 0.0f;
+    }
+
+    int num_windows = (n - FFT_LENGTH) / STRIDE + 1;
+
+    for (int w = 0; w < num_windows; w++)
+    {
+        int start = w * STRIDE;
+
+        float real[FFT_LENGTH];
+        float imag[FFT_LENGTH];
+        float seg_mean = 0.0f;
+
+        for (int i = 0; i < FFT_LENGTH; i++)
+        {
+            seg_mean += buf[start + i];
+        }
+        seg_mean /= FFT_LENGTH;
+
+        for (int i = 0; i < FFT_LENGTH; i++)
+        {
+            real[i] = (buf[start + i] - seg_mean) * WINDOW[i];
+            imag[i] = 0.0f;
+        }
+
+        eml_fft_forward(*fft_table, real, imag, FFT_LENGTH);
+
+        for (int k = 0; k < NUM_BINS; k++)
+        {
+            float mag2 = real[k] * real[k] + imag[k] * imag[k];
+            int is_pos_freq = (k > 0 && k < FFT_LENGTH / 2);
+            float psd = mag2 * PSD_SCALE * (is_pos_freq ? 2.0f : 1.0f);
+            if (psd > psd_out[k])
+            {
+                psd_out[k] = psd;
+            }
+        }
+    }
+}
+
+static void extract_axis_features(const float *axis_data, uint32_t n,
+                                  float state[3][2],
+                                  const EmlFFT *fft_table,
+                                  float out[6])
+{
+    float buf[RAW_SAMPLES_PER_AXIS];
+    memcpy(buf, axis_data, n * sizeof(float));
+
+    apply_filter(buf, n, state);
+
+    float mean = 0.0f;
+    for (uint32_t i = 0; i < n; i++)
+        mean += buf[i];
+    mean /= n;
+    for (uint32_t i = 0; i < n; i++)
+        buf[i] -= mean;
+
+    float sum_sq = 0.0f;
+    float sum_cube = 0.0f;
+    float sum_four = 0.0f;
+    for (uint32_t i = 0; i < n; i++)
+    {
+        float v = buf[i];
+        sum_sq += v * v;
+        sum_cube += v * v * v;
+        sum_four += v * v * v * v;
+    }
+
+    float rms = sqrtf(sum_sq / n);
+    float variance = sum_sq / n;
+    float std = (variance > 0.0f) ? sqrtf(variance) : 1e-10f;
+    float std3 = std * std * std;
+    float std4 = std3 * std;
+    float skewness = (std3 > 0.0f) ? (sum_cube / n) / std3 : 0.0f;
+    float kurtosis = (std4 > 0.0f) ? (sum_four / n) / std4 - 3.0f : -3.0f;
+
+    float psd[NUM_BINS];
+    compute_psd_maxhold(buf, n, fft_table, psd);
+
+    float psd_safe[NUM_BINS];
+    for (int k = 0; k < NUM_BINS; k++)
+    {
+        psd_safe[k] = (psd[k] > 1e-10f) ? psd[k] : 1e-10f;
+    }
+
+    float psd_mean = 0.0f;
+    for (int k = 0; k < NUM_BINS; k++)
+        psd_mean += psd_safe[k];
+    psd_mean /= NUM_BINS;
+
+    float psd_var = 0.0f;
+    for (int k = 0; k < NUM_BINS; k++)
+    {
+        float d = psd_safe[k] - psd_mean;
+        psd_var += d * d;
+    }
+    psd_var /= NUM_BINS;
+
+    float psd_std = sqrtf(psd_var);
+    float fft_skew_num = 0.0f;
+    float fft_kurt_num = 0.0f;
+    for (int k = 0; k < NUM_BINS; k++)
+    {
+        float d = psd_safe[k] - psd_mean;
+        fft_skew_num += d * d * d;
+        fft_kurt_num += d * d * d * d;
+    }
+    fft_skew_num /= NUM_BINS;
+    fft_kurt_num /= NUM_BINS;
+
+    float fft_skew = fft_skew_num / (psd_std * psd_std * psd_std + 1e-10f);
+    float fft_kurt = fft_kurt_num / (psd_var * psd_var + 1e-10f) - 3.0f;
+
+    int start_bin = 1;
+    float bin_raw = FILTER_CUTOFF * FFT_LENGTH / SAMPLING_FREQ;
+    int stop_bin = (int)(bin_raw + 0.5f) + 1;
+
+    float log_val = 0.0f;
+    if (start_bin < stop_bin && start_bin < NUM_BINS)
+    {
+        float val = psd_safe[start_bin];
+        log_val = log10f(val);
+    }
+
+    out[0] = rms;
+    out[1] = skewness;
+    out[2] = kurtosis;
+    out[3] = fft_skew;
+    out[4] = fft_kurt;
+    out[5] = log_val;
+}
+
+int AnomalyInfer::extract_feature(void *data, uint32_t len)
+{
+    memset(filter_state, 0, sizeof(filter_state));
+    if (len != RAW_SAMPLES_PER_AXIS)
+    {
+        APP_DBG("AnomalyInfer: expected %d samples, got %d\n",
+                RAW_SAMPLES_PER_AXIS, len);
+        return -1;
+    }
+    if (!tables_ready)
+    {
+        APP_DBG("AnomalyInfer: FFT tables not initialized\n");
+        return -1;
+    }
+
+    int16_t *raw = (int16_t *)data;
+
+    EmlFFT fft_table;
+    fft_table.length = FFT_LENGTH / 2;
+    fft_table.cos = fft_cos;
+    fft_table.sin = fft_sin;
+
+    float axis_buf[AXES][RAW_SAMPLES_PER_AXIS];
+    for (uint32_t i = 0; i < len; i++)
+    {
+        axis_buf[0][i] = (float)(CONVERT_G_TO_MS2(raw[i * ELEMENT_STRIDE + 0]) * SCALE_AXES);
+        axis_buf[1][i] = (float)(CONVERT_G_TO_MS2(raw[i * ELEMENT_STRIDE + 1]) * SCALE_AXES);
+        axis_buf[2][i] = (float)(CONVERT_G_TO_MS2(raw[i * ELEMENT_STRIDE + 2]) * SCALE_AXES);
+    }
+
+    float feat_per_axis[6];
+    int feat_idx = 0;
+    for (int a = 0; a < AXES; a++)
+    {
+        extract_axis_features(axis_buf[a], len, filter_state[a],
+                              &fft_table, feat_per_axis);
+        for (int f = 0; f < 6; f++)
+        {
+            features[feat_idx++] = feat_per_axis[f];
+        }
+    }
+
+    return 0;
+}
+
+int AnomalyInfer::inference(void *data, uint32_t len)
+{
+    uint32_t prev = sys_ctrl_millis();
+
+    if (extract_feature(data, len) != 0)
+    {
+        return -1;
+    }
+
+    APP_DBG("- Anomaly Features:\n");
+    for (int i = 0; i < FEATURE_LEN; i++)
+    {
+        APP_DBG("\t[%d]=%.4f\n", i, features[i]);
+    }
+#define MAX_PREDICT_CLASS 4
+    float out[MAX_PREDICT_CLASS];
+    const char *label[MAX_PREDICT_CLASS] = {
+        "Idle",
+        "Left-Right",
+        "Maritine",
+        "Up-Down"};
+    float norm_features[FEATURE_LEN];
+    for (int i = 0; i < FEATURE_LEN; i++) {
+        norm_features[i] = (features[i] - NORM_MEAN[i]) * NORM_SCALE[i];
+    }
+    anomaly_model_regress(norm_features, FEATURE_LEN, out, MAX_PREDICT_CLASS);
+
+    int predicted_class = 0;
+    float max_prob = out[0];
+    for (int i = 1; i < MAX_PREDICT_CLASS; i++)
+    {
+        if (out[i] > max_prob)
+        {
+            max_prob = out[i];
+            predicted_class = i;
+        }
+    }
+
+    APP_DBG("[%08X] P(idle)=%.3f "
+            "P(left-right)=%.3f "
+            "P(maritime)=%.3f "
+            "P(up-down)=%.3f >>>>>>>>> Result: %s, time: %d\n",
+            (unsigned int)this,
+            out[0], out[1], out[2], out[3],
+            label[predicted_class], (sys_ctrl_millis() - prev));
+
+    return predicted_class;
+}

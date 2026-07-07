@@ -1,5 +1,6 @@
 include sources/app/nn/model/Makefile.mk
 include sources/app/nn/inference/impact_detect/Makefile.mk
+include sources/app/nn/inference/anomal_detect/Makefile.mk
 
 CFLAGS		+= -I./sources/app/nn
 CPPFLAGS	+= -I./sources/app/nn

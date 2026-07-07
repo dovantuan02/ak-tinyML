@@ -273,7 +273,7 @@ int main_app() {
 	}
 #endif
 
-	infer = new NNInfer(ImpactDetect);
+	infer = new NNInfer(AnomalyDetect);
 	if (!infer) {
 		APP_DBG("Allocate NN failed !\n");
 	}
@@ -354,16 +354,38 @@ void task_polling_console() {
 }
 
 void task_polling_ml() {
-	// if (accel_data_ready) {
-	// 	// int32_t result = accel_predict_impact(&accel_rb);		
-	// 	int8_t z_buff[ACCEL_BUFFER_SIZE];
-	// 	accel_ring_bufffer_get_z(&accel_rb, z_buff, ACCEL_BUFFER_SIZE);
-	// 	infer->inference((void*)z_buff, ACCEL_BUFFER_SIZE);
-	// 	ENTRY_CRITICAL();
-	// 	accel_ring_buffer_reset(&accel_rb);
-	// 	accel_data_ready = false;
-	// 	EXIT_CRITICAL();
-	// }
+	struct icm_data_internal_t {
+		int16_t acc_x;
+		int16_t acc_y;
+		int16_t acc_z;
+		int16_t gyro_x;
+		int16_t gyro_y;
+		int16_t gyro_z;
+
+	};
+	ENTRY_CRITICAL();
+	if (ring_buffer_is_empty(&accel_sensor.sample_buff) || !infer) {
+		EXIT_CRITICAL();
+		return;
+	}
+
+	struct icm_data_internal_t icm_data;
+	if (ring_buffer_is_full(&accel_sensor.sample_buff)) {
+		/* array buffer x, y, z with 2s and 58Hz */
+		int16_t buffer[3 * 2 * 58];
+		int i = 0;
+		while (!ring_buffer_is_empty(&accel_sensor.sample_buff)) {
+			ring_buffer_get(&accel_sensor.sample_buff, &icm_data);
+			buffer[i++] = icm_data.acc_x;
+			buffer[i++] = icm_data.acc_y;
+			buffer[i++] = icm_data.acc_z;
+		}
+
+		/* inference */
+		int ret = infer->inference(buffer, 2 * 58);
+	}
+
+	EXIT_CRITICAL();
 }
 
 /*****************************************************************************/
