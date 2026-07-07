@@ -10,9 +10,6 @@ class AnomalyInfer {
 private:
     float features[FEATURE_LEN];
     float filter_state[3][3][2];
-    float fft_cos[8];
-    float fft_sin[8];
-    bool tables_ready;
 
     int extract_feature(void* data, uint32_t len);
 

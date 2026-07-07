@@ -3,18 +3,20 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include <eml_fft.h>
-
 #include "sys_ctrl.h"
 #include "app_dbg.h"
+
+#include "arm_math.h"
+#include "arm_const_structs.h"
+
 #include "anomal_detect.h"
 #include "model/anomal_detection_v1.h"
 
-#define AXES                    (3) /* x, y, z */
+#define AXES                    (3)
 #define SCALE_AXES              (0.2f)
 #define FILTER_CUTOFF           (3.0f)
 #define SAMPLING_FREQ           (58.0f)
-#define RAW_SAMPLES_PER_AXIS    (116) 
+#define RAW_SAMPLES_PER_AXIS    (116)
 #define FFT_LENGTH              (16)
 #define FFT_OVERLAP             (FFT_LENGTH / 2)
 #define NUM_BINS                (FFT_LENGTH / 2 + 1)
@@ -27,15 +29,15 @@
 static const float NORM_MEAN[FEATURE_LEN] = {673.8051f, -0.2186f, 0.1686f, 2.4455f, 4.0375f, 4.6634f, 2094.2317f, 0.4336f, 0.4695f, 2.4397f, 4.0200f, 5.4251f, 4572.1592f, -1.9544f, 2.9985f, 2.4415f, 4.0257f, 6.7278f};
 static const float NORM_SCALE[FEATURE_LEN] = {0.002215f, 1.088804f, 0.699978f, 69.897835f, 22.677576f, 0.936788f, 0.000495f, 0.873590f, 0.474650f, 78.085106f, 25.289017f, 1.047305f, 0.001687f, 1.688269f, 0.626388f, 193.082199f, 63.170059f, 12.729128f};
 
-static const float SOS_COEFFS[3][6] = {
-    {1.0326097345e-05f, 2.0652194690e-05f, 1.0326097345e-05f, 1.0f, -1.4485440706e+00f, 5.2855930280e-01f},
-    {1.0f, 2.0f, 1.0f, 1.0f, -1.5462039793e+00f, 6.3161378691e-01f},
-    {1.0f, 2.0f, 1.0f, 1.0f, -1.7506318227e+00f, 8.4733389384e-01f},
-};
-
 static const float WINDOW[FFT_LENGTH] = {
     0.0f, 0.5f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f,
     1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 0.5f};
+
+static const float BIQUAD_COEFFS_DF2T[3][5] = {
+    {1.0326097345e-05f, 2.0652194690e-05f, 1.0326097345e-05f, +1.4485440706e+00f, -5.2855930280e-01f},
+    {1.0f, 2.0f, 1.0f, +1.5462039793e+00f, -6.3161378691e-01f},
+    {1.0f, 2.0f, 1.0f, +1.7506318227e+00f, -8.4733389384e-01f},
+};
 
 AnomalyInfer::AnomalyInfer()
 {
@@ -44,40 +46,13 @@ AnomalyInfer::AnomalyInfer()
         features[i] = 0.0f;
     }
     memset(filter_state, 0, sizeof(filter_state));
-
-    EmlFFT table;
-    table.length = FFT_LENGTH / 2;
-    table.cos = fft_cos;
-    table.sin = fft_sin;
-    tables_ready = (eml_fft_fill(table, FFT_LENGTH) == EmlOk);
 }
 
 AnomalyInfer::~AnomalyInfer()
 {
 }
 
-static float process_biquad(float x, float state[2], const float coeffs[6])
-{
-    float y = coeffs[0] * x + state[0];
-    state[0] = coeffs[1] * x - coeffs[4] * y + state[1];
-    state[1] = coeffs[2] * x - coeffs[5] * y;
-    return y;
-}
-
-static void apply_filter(float *buf, uint32_t n, float state[3][2])
-{
-    for (uint32_t i = 0; i < n; i++)
-    {
-        float x = buf[i];
-        for (int s = 0; s < 3; s++)
-        {
-            x = process_biquad(x, state[s], SOS_COEFFS[s]);
-        }
-        buf[i] = x;
-    }
-}
-
-static void compute_psd_maxhold(const float *buf, uint32_t n, const EmlFFT *fft_table, float psd_out[NUM_BINS])
+static void compute_psd_maxhold(const float *buf, uint32_t n, float psd_out[NUM_BINS])
 {
     for (int k = 0; k < NUM_BINS; k++)
     {
@@ -90,27 +65,24 @@ static void compute_psd_maxhold(const float *buf, uint32_t n, const EmlFFT *fft_
     {
         int start = w * STRIDE;
 
-        float real[FFT_LENGTH];
-        float imag[FFT_LENGTH];
+        float cplx_buf[2 * FFT_LENGTH];
         float seg_mean = 0.0f;
 
-        for (int i = 0; i < FFT_LENGTH; i++)
-        {
-            seg_mean += buf[start + i];
-        }
-        seg_mean /= FFT_LENGTH;
+        arm_mean_f32((float32_t*)&buf[start], FFT_LENGTH, &seg_mean);
 
         for (int i = 0; i < FFT_LENGTH; i++)
         {
-            real[i] = (buf[start + i] - seg_mean) * WINDOW[i];
-            imag[i] = 0.0f;
+            cplx_buf[2 * i]     = (buf[start + i] - seg_mean) * WINDOW[i];
+            cplx_buf[2 * i + 1] = 0.0f;
         }
 
-        eml_fft_forward(*fft_table, real, imag, FFT_LENGTH);
+        arm_cfft_f32(&arm_cfft_sR_f32_len16, cplx_buf, 0, 1);
 
         for (int k = 0; k < NUM_BINS; k++)
         {
-            float mag2 = real[k] * real[k] + imag[k] * imag[k];
+            float re = cplx_buf[2 * k];
+            float im = cplx_buf[2 * k + 1];
+            float mag2 = re * re + im * im;
             int is_pos_freq = (k > 0 && k < FFT_LENGTH / 2);
             float psd = mag2 * PSD_SCALE * (is_pos_freq ? 2.0f : 1.0f);
             if (psd > psd_out[k])
@@ -123,24 +95,18 @@ static void compute_psd_maxhold(const float *buf, uint32_t n, const EmlFFT *fft_
 
 static void extract_axis_features(const float *axis_data, uint32_t n,
                                   float state[3][2],
-                                  const EmlFFT *fft_table,
                                   float out[6])
 {
     float buf[RAW_SAMPLES_PER_AXIS];
     memcpy(buf, axis_data, n * sizeof(float));
 
-    apply_filter(buf, n, state);
+    arm_biquad_cascade_df2T_instance_f32 biquad;
+    arm_biquad_cascade_df2T_init_f32(&biquad, 3, (float32_t *)BIQUAD_COEFFS_DF2T, (float32_t *)state);
+    arm_biquad_cascade_df2T_f32(&biquad, buf, buf, n);
 
-    float mean = 0.0f;
-    for (uint32_t i = 0; i < n; i++)
-    {
-        mean += buf[i];
-    }
-    mean /= n;
-    for (uint32_t i = 0; i < n; i++)
-    {
-        buf[i] -= mean;
-    }
+    float mean_val = 0.0f;
+    arm_mean_f32(buf, n, &mean_val);
+    arm_offset_f32(buf, -mean_val, buf, n);
 
     float sum_sq = 0.0f;
     float sum_cube = 0.0f;
@@ -148,21 +114,21 @@ static void extract_axis_features(const float *axis_data, uint32_t n,
     for (uint32_t i = 0; i < n; i++)
     {
         float v = buf[i];
-        sum_sq += v * v;
+        sum_sq   += v * v;
         sum_cube += v * v * v;
         sum_four += v * v * v * v;
     }
 
     float rms = sqrtf(sum_sq / n);
     float variance = sum_sq / n;
-    float std = (variance > 0.0f) ? sqrtf(variance) : 1e-10f;
-    float std3 = std * std * std;
-    float std4 = std3 * std;
+    float std_val = (variance > 0.0f) ? sqrtf(variance) : 1e-10f;
+    float std3 = std_val * std_val * std_val;
+    float std4 = std3 * std_val;
     float skewness = (std3 > 0.0f) ? (sum_cube / n) / std3 : 0.0f;
     float kurtosis = (std4 > 0.0f) ? (sum_four / n) / std4 - 3.0f : -3.0f;
 
     float psd[NUM_BINS];
-    compute_psd_maxhold(buf, n, fft_table, psd);
+    compute_psd_maxhold(buf, n, psd);
 
     float psd_safe[NUM_BINS];
     for (int k = 0; k < NUM_BINS; k++)
@@ -171,30 +137,23 @@ static void extract_axis_features(const float *axis_data, uint32_t n,
     }
 
     float psd_mean = 0.0f;
-    for (int k = 0; k < NUM_BINS; k++)
-        psd_mean += psd_safe[k];
-    psd_mean /= NUM_BINS;
+    arm_mean_f32(psd_safe, NUM_BINS, &psd_mean);
 
     float psd_var = 0.0f;
-    for (int k = 0; k < NUM_BINS; k++)
-    {
-        float d = psd_safe[k] - psd_mean;
-        psd_var += d * d;
-    }
-    psd_var /= NUM_BINS;
-
-    float psd_std = sqrtf(psd_var);
     float fft_skew_num = 0.0f;
     float fft_kurt_num = 0.0f;
     for (int k = 0; k < NUM_BINS; k++)
     {
         float d = psd_safe[k] - psd_mean;
+        psd_var      += d * d;
         fft_skew_num += d * d * d;
         fft_kurt_num += d * d * d * d;
     }
+    psd_var /= NUM_BINS;
     fft_skew_num /= NUM_BINS;
     fft_kurt_num /= NUM_BINS;
 
+    float psd_std = (psd_var > 0.0f) ? sqrtf(psd_var) : 1e-10f;
     float fft_skew = fft_skew_num / (psd_std * psd_std * psd_std + 1e-10f);
     float fft_kurt = fft_kurt_num / (psd_var * psd_var + 1e-10f) - 3.0f;
 
@@ -225,18 +184,8 @@ int AnomalyInfer::extract_feature(void *data, uint32_t len)
         APP_DBG("Expected %d samples, got %d\n", RAW_SAMPLES_PER_AXIS, len);
         return -1;
     }
-    if (!tables_ready)
-    {
-        APP_DBG("FFT tables not initialized\n");
-        return -1;
-    }
 
     int16_t *raw = (int16_t *)(data);
-
-    EmlFFT fft_table;
-    fft_table.length = FFT_LENGTH / 2;
-    fft_table.cos = fft_cos;
-    fft_table.sin = fft_sin;
 
     float axis_buf[AXES][RAW_SAMPLES_PER_AXIS];
     for (uint32_t i = 0; i < len; i++)
@@ -250,7 +199,7 @@ int AnomalyInfer::extract_feature(void *data, uint32_t len)
     int feat_idx = 0;
     for (int a = 0; a < AXES; a++)
     {
-        extract_axis_features(axis_buf[a], len, filter_state[a], &fft_table, feat_per_axis);
+        extract_axis_features(axis_buf[a], len, filter_state[a], feat_per_axis);
         for (int f = 0; f < 6; f++)
         {
             features[feat_idx++] = feat_per_axis[f];
@@ -298,9 +247,9 @@ int AnomalyInfer::inference(void *data, uint32_t len)
             predicted_class = i;
         }
     }
-    if (max_prob < 0.4f && predicted_class != 0)
+    if (max_prob < 0.3f && predicted_class != 0)
     {
-        predicted_class = 0; // Noise -> Idle
+        predicted_class = 0;
     }
 
     APP_DBG("[%08X] P(idle)=%.3f "
