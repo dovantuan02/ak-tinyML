@@ -1,7 +1,7 @@
 # Anomaly Detection
 
 ## 1. Overview
-
+![AK-Kit-Home](image/ak-kit-home.png)
 This system detects anomalous motion using the ICM-20948 (9-DoF IMU) sensor on an STM32L151 microcontroller. 3-axis accelerometer data (X, Y, Z) is collected, processed through a DSP pipeline, and fed into a small fully-connected neural network to classify 4 motion states.
 
 ## 2. Hardware
@@ -57,26 +57,47 @@ Each JSON file contains:
 For each window of 116 samples per axis (348 values total), the pipeline processes sequentially:
 
 ### Pre-processing
-1. Raw scale: `raw × SCALE_AXES (0.2)`
-2. **Butterworth lowpass** 6th-order, cutoff 3 Hz — removes high-frequency noise
-3. Subtract mean — removes DC offset
 
-### Time-domain features — 3 features/axis
-- **RMS**: root mean square
-- **Skewness**: 3rd moment (asymmetry)
-- **Kurtosis**: 4th moment - 3 (tailedness)
+Each axis buffer undergoes 3 stages (C++: `anomal_detect.cpp`, Python: `compute_scaler.py`):
 
-### Frequency-domain features — 3 features/axis
-- FFT length = 16, overlap 50% (hop = 8)
-- Window: `[0, 0.5, 1, ..., 1, 0.5]`
-- PSD computed via spectrogram with max-hold across windows
-- **FFT Skewness**: spectral asymmetry
-- **FFT Kurtosis**: spectral peakedness
-- **Log10 PSD bin 1**: lowest frequency energy (after DC)
+1. **Raw scale** — convert raw ADC counts to physical units:
+   - C++: `raw * 9.80665 * 0.2`
+   - Python: `raw * 0.2`
 
-**Total features**: 6 features × 3 axes = **18 features**
+2. **Butterworth lowpass filter** — 6th order, cutoff 3 Hz:
+   - Implemented as 3 cascaded biquad sections (second-order IIR filters)
+   - C++: `arm_biquad_cascade_df2T_f32` with coefficients printed directly from the Python `signal.butter` SOS matrix, guaranteeing bit-exact matching
+   - Removes high-frequency noise above 3 Hz; human motion is predominantly < 3 Hz
 
-> **Important**: The Python code (in the notebook) and C++ code (on-device) are written to match exactly, guaranteeing identical feature extraction between training and inference.
+3. **DC removal** — subtract the mean from the filtered signal:
+   - `x = x - mean(x)`
+   - Removes the gravitational component (DC bias) so only the dynamic acceleration is analyzed
+
+### Time-Domain Features — 3 features/axis
+
+These describe the **shape of the acceleration signal over time**. For each axis, after pre-processing, 3 statistics are computed:
+
+- RMS (Root Mean Square)
+- Skewness (3rd standardized moment)
+- Kurtosis (Excess Kurtosis, 4th standardized moment − 3)
+### Frequency-Domain Features — 3 features/axis
+- PSD Computation
+- FFT Skewness — spectral asymmetry
+- FFT Kurtosis — spectral peakedness
+- Log PSD Bin 1 — low-frequency energy
+
+### Feature Vector Layout
+
+The final 18-element feature vector is assembled axis-by-axis:
+
+| Index | Feature |
+|-------|---------|
+| 0 | RMS |
+| 1 | Skewness |
+| 2 | Kurtosis |
+| 3 | FFT Skew |
+| 4 | FFT Kurt |
+| 5 | Log PSD bin 1 |
 
 ### CMSIS-DSP on-device implementation
 
@@ -145,6 +166,14 @@ If max probability < 0.3 and predicted class != 0 (idle), force class to 0 — p
 4. **Compute new scaler**: run `nn/trainning/compute_scaler.py` to get NORM_MEAN/NORM_SCALE
 5. **Update C++ files**: copy the new header to `inference/anomal_detect/model/` and update scaler values in `anomal_detect.cpp`
 6. **Rebuild firmware**: run `make` in the project root
+7. **Plot Loss-Accuracy**
+
+![Plot-Loss](image/plot-train-loss.png)
+![Plot-Accuracy](image/plot-train-accuracy.png)
+
+8. **Confusion Matrix**
+
+![Confusion Matrix Valid](image/confusion-matrix-validation.png)
 
 ### Configuration parameters (CONFIG)
 
@@ -169,3 +198,23 @@ If max probability < 0.3 and predicted class != 0 (idle), force class to 0 — p
 | [Anomal-Implement](../inference/anomal_detect) | AnomalyInfer class header |
 | [Model](../inference/anomal_detect/model/anomal_detection_v1.h) | Model weights (emlearn) |
 | [Sensor](../../task_accel_sensor.cpp) | ICM-20948 driver + ring buffer |
+
+## 9. Result
+### 1. Predict state Idle 
+![Predict-Idle](image/features-predict-idle.png)
+
+### 2. Predict state Up-Down 
+![Predict-Up-Down](image/features-predict-up-down.png)
+
+### 3. Predict state Left-Right 
+![Predict-Left-Rigt](image/features-predict-left-right.png)
+
+### 4. Predict state Maritine 
+![Predict-Maritine](image/features-predict-maritine.png)
+
+## 9. Reference
+| Topic | Description |
+| ----- | ----------- |
+| [Emlearn](https://github.com/emlearn/emlearn) | Machine learning for microcontroller and embedded systems |
+| [EdgeImpulse](https://www.edgeimpulse.com) | Collect Data |
+| [Arduino Anomaly Detection](https://www.hackster.io/mjrobot/tinyml-made-easy-anomaly-detection-motion-classification-958fd2) | Arduino make Tiny ML |
