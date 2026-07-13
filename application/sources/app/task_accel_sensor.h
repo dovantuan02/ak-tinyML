@@ -4,6 +4,10 @@
 #include "ICM_20948.h"
 #include "ring_buffer.h"
 
+#define ACCEL_AXES_NUM                  (3)   
+#define ACCEL_SAMPLE_RATE_HZ            (58)
+#define ACCEL_SAMPLE_DURATION_SECONDS   (2)
+
 typedef struct {
     uint8_t ability;
     uint32_t time_irq; // timeIrq * 10ms 

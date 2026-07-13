@@ -78,7 +78,7 @@
 
 #include "Wire.h"
 
-static NNInfer *infer;
+static NNInfer infer(AnomalyDetect);
 /* ----------------------- Json includes ------------------------------------*/
 //#include "json.hpp"
 
@@ -268,12 +268,6 @@ int main_app() {
 		APP_PRINT("NG\n");
 	}
 #endif
-
-	infer = new NNInfer(AnomalyDetect);
-	if (!infer) {
-		APP_DBG("Allocate NN failed !\n");
-	}
-	
 	/* start timer for application */
 	app_init_state_machine();
 	app_start_timer();
@@ -360,16 +354,14 @@ void task_polling_ml() {
 		int16_t gyro_z;
 
 	};
-	ENTRY_CRITICAL();
-	if (ring_buffer_is_empty(&accel_sensor.sample_buff) || !infer) {
-		EXIT_CRITICAL();
+	if (ring_buffer_is_empty(&accel_sensor.sample_buff)) {
 		return;
 	}
 
 	struct icm_data_internal_t icm_data;
 	if (ring_buffer_is_full(&accel_sensor.sample_buff)) {
 		/* array buffer x, y, z with 2s and 58Hz */
-		int16_t buffer[3 * 2 * 58];
+		int16_t buffer[ACCEL_AXES_NUM * ACCEL_SAMPLE_DURATION_SECONDS * ACCEL_SAMPLE_RATE_HZ];
 		int i = 0;
 		while (!ring_buffer_is_empty(&accel_sensor.sample_buff)) {
 			ring_buffer_get(&accel_sensor.sample_buff, &icm_data);
@@ -377,12 +369,8 @@ void task_polling_ml() {
 			buffer[i++] = icm_data.acc_y;
 			buffer[i++] = icm_data.acc_z;
 		}
-
-		/* inference */
-		int ret = infer->inference(buffer, 2 * 58);
+		infer.inference(buffer, ACCEL_SAMPLE_DURATION_SECONDS * ACCEL_SAMPLE_RATE_HZ);
 	}
-
-	EXIT_CRITICAL();
 }
 
 /*****************************************************************************/

@@ -1,9 +1,12 @@
 # Anomaly Detection
 
 ## 1. Overview
-![AK-Kit-Home](image/title.drawio.png)
+![OverviewImage](image/title.png)
 
 This system detects anomalous motion using the ICM-20948 (9-DoF) sensor on an STM32L151 microcontroller. 3-axis accelerometer data (X, Y, Z) is collected, processed through a DSP pipeline, and fed into a small fully-connected neural network to classify 4 motion states.
+
+### Why I choose **Machine Learing** instead of **Rule-Based Algorithm**
+Machine Learning was chosen for this project because it can learn complex motion patterns from sensor data, providing higher classification accuracy, better robustness against variations, and easier scalability than traditional rule-based algorithms. Combined with DSP-based feature extraction and TinyML deployment, the solution enables efficient real-time motion classification on resource-constrained embedded devices.
 
 ## 2. Hardware
 

@@ -14,10 +14,8 @@
 
 #define SCALE_UP(x) ((x) * 9.80665f)
 
-#define ACCEL_SAMPLE_RATE_HZ (58)
-#define ACCEL_SAMPLE_DURATION_SECONDS (2)
 /* acc: x, y, z (16bit * 3), gyro: x, y, z (16bit * 3) */ 
-static constexpr size_t ACCEL_DATA_SIZE = (sizeof(int16_t) * 3 + sizeof(int16_t) * 3);
+static constexpr size_t ACCEL_DATA_SIZE = (sizeof(int16_t) * ACCEL_AXES_NUM + sizeof(int16_t) * ACCEL_AXES_NUM);
 static constexpr size_t ACCEL_SAMPLE_BUFFER_SIZE = (ACCEL_SAMPLE_DURATION_SECONDS * ACCEL_SAMPLE_RATE_HZ * ACCEL_DATA_SIZE);
 
 static uint8_t buffer[ACCEL_SAMPLE_BUFFER_SIZE];
@@ -135,7 +133,7 @@ void accel_timer_polling(Accel_t accel)
                 y = SCALE_UP((float)data.Raw_Accel.Data.Y);
                 z = SCALE_UP((float)data.Raw_Accel.Data.Z);
 
-                #if 1
+                #if 0
                 xfprintf((void (*)(int))sys_ctrl_shell_put_char, "%.1f,%.1f,%.1f\n", x, y, z);
                 #else
                 struct icm_data_internal_t icm_data = {
