@@ -78,8 +78,6 @@
 
 #include "Wire.h"
 
-mic_pcm_t mic_pcm;
-
 static NNInfer *infer;
 /* ----------------------- Json includes ------------------------------------*/
 //#include "json.hpp"
@@ -140,8 +138,6 @@ int main_app() {
 	sys_ctrl_soft_watchdog_init(200);		/* 20s */
 
 	SPI.begin();
-
-	mic_init(&mic_pcm, sys_adc_get_mic);
 
 	/* adc peripheral configure */
 	io_cfg_adc1();			/* configure adc for thermistor and CT sensor */
@@ -277,6 +273,7 @@ int main_app() {
 	if (!infer) {
 		APP_DBG("Allocate NN failed !\n");
 	}
+	
 	/* start timer for application */
 	app_init_state_machine();
 	app_start_timer();

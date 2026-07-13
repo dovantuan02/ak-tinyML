@@ -472,10 +472,6 @@ void exti_line15_irq() {
 void timer6_irq() {
 	if (TIM_GetITStatus(TIM6, TIM_IT_Update) != RESET) {
 		TIM_ClearITPendingBit(TIM6, TIM_IT_Update);
-
-		/* ADC in continuous mode — read latest value directly */
-		extern mic_pcm_t mic_pcm;
-		mic_timer_handle(&mic_pcm);
 	}
 }
 

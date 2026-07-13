@@ -101,7 +101,6 @@ extern void task_rf24_demo(ak_msg_t*);
 /*****************************************************************************/
 extern void task_polling_zigbee();
 extern void task_polling_console();
-extern void task_polling_mic_wave();
 #ifdef __cplusplus
 extern "C" {
 #endif
