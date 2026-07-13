@@ -1,7 +1,8 @@
 # Anomaly Detection
 
 ## 1. Overview
-![AK-Kit-Home](image/ak-kit-home.png)
+![AK-Kit-Home](image/title.drawio.png)
+
 This system detects anomalous motion using the ICM-20948 (9-DoF) sensor on an STM32L151 microcontroller. 3-axis accelerometer data (X, Y, Z) is collected, processed through a DSP pipeline, and fed into a small fully-connected neural network to classify 4 motion states.
 
 ## 2. Hardware
@@ -117,22 +118,22 @@ Output: 4 class probabilities       Total: ~634 floats
 
 ```mermaid
 sequenceDiagram
-    participant ICM as ICM-20948
-    participant RB as Ring Buffer (2 s / 116 samples)
-    participant Task as task_polling_ml()
+    participant Sensor
+    participant RB as Ring Buffer
+    participant Task as Polling ML
     participant Infer as AnomalyInfer::inference()
-    participant DSP as DSP Feature Extraction
+    participant DSP as Feature Extraction
     participant Norm as Feature Normalization
-    participant NN as anomaly_model_regress()
+    participant NN as Nerual Netron
     participant CLS as Classification
 
-    ICM->>RB: Stream accelerometer data (58 Hz)
+    Sensor->>RB: Stream accelerometer data
 
     RB->>Task: Buffer full (116 samples)
-    Task->>Infer: inference(buffer, 116)
+    Task->>Infer: inference
 
     Infer->>DSP: Extract features
-    Note right of DSP: Must match the Python implementation
+    Note right of DSP: Match the Python train
 
     DSP->>Norm: Feature vector
     Note right of Norm: normalized = (feature - mean) × scale
@@ -144,7 +145,7 @@ sequenceDiagram
     CLS->>CLS: Argmax
     Note right of CLS: Optional confidence threshold
 
-    CLS-->>Task: Predicted class (0–3)
+    CLS-->>Task: Predicted class (Idle, Left-Right, Up-Down, Maritine)
 ```
 ## 7. Model's Loss and Accuracy 
 

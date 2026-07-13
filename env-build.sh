@@ -19,3 +19,5 @@ apply_patch() {
     cd - || exit 1
 }
 apply_patch SparkFun_ICM-20948_ArduinoLibrary 01-fix-serial.patch
+apply_patch SparkFun_ICM-20948_ArduinoLibrary 02-enable-dmp.patch
+apply_patch SparkFun_ICM-20948_ArduinoLibrary 03-undef-for-arm.path

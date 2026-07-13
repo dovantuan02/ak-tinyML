@@ -50,13 +50,11 @@ void task_accel(ak_msg_t *msg)
 
     case AC_ACCEL_SET_CONFIG:
     {
+        bool success = true;
         APP_DBG_SIG("AC_ACCEL_SET_CONFIG\n");
         accel_sensor.ability = AK_DISABLE;
-        bool success = true;
-        success &= (accel_sensor.icm20948.initializeDMP() == ICM_20948_Stat_Ok);
-        if (!success)
-        {
-            APP_DBG("Init DMP failed !\n");
+        if (accel_sensor.icm20948.initializeDMP() != ICM_20948_Stat_Ok) {
+            APP_DBG("Init DMP failed, status: %s!\n", accel_sensor.icm20948.statusString());
             goto retry;
         }
         else
@@ -79,7 +77,6 @@ void task_accel(ak_msg_t *msg)
         //    INV_ICM20948_SENSOR_GRAVITY                     (32-bit 6-axis quaternion)
         //    INV_ICM20948_SENSOR_LINEAR_ACCELERATION         (16-bit accel + 32-bit 6-axis quaternion)
         //    INV_ICM20948_SENSOR_ORIENTATION                 (32-bit 9-axis quaternion + heading accuracy)
-
         success &= (accel_sensor.icm20948.enableDMPSensor(INV_ICM20948_SENSOR_ACCELEROMETER) == ICM_20948_Stat_Ok);
         // Set to the maximum
         success &= (accel_sensor.icm20948.setDMPODRrate(DMP_ODR_Reg_Accel, 0) == ICM_20948_Stat_Ok);
@@ -96,10 +93,8 @@ void task_accel(ak_msg_t *msg)
         accel_sensor.ability = AK_ENABLE;
         break;
 
-    retry:
-    {
-        timer_set(AC_TASK_ACCEL_ID, AC_ACCEL_SET_CONFIG, 200, TIMER_ONE_SHOT);
-    }
+        retry:
+            timer_set(AC_TASK_ACCEL_ID, AC_ACCEL_SET_CONFIG, 200, TIMER_ONE_SHOT);
     }
     break;
 
