@@ -1,0 +1,14 @@
+diff --git a/src/ICM_20948.h b/src/ICM_20948.h
+index bbde34c..3619b67 100644
+--- a/src/ICM_20948.h
++++ b/src/ICM_20948.h
+@@ -55,7 +55,8 @@ public:
+   void enableDebugging(Stream &debugPort = Serial); //Given a port to print to, enable debug messages.
+ #endif
+ #else
+-  void enableDebugging(Stream &debugPort = Serial); //Given a port to print to, enable debug messages.
++  // void enableDebugging(Stream &debugPort = Serial); //Given a port to print to, enable debug messages.
++  void enableDebugging(Stream &debugPort);
+ #endif
+ 
+   void disableDebugging(void); //Turn off debug statements

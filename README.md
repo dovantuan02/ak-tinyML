@@ -24,6 +24,32 @@ The entire pipeline from sensor sampling to feature extraction to neural inferen
 - **MCU**: STM32L151 (ARM Cortex-M3)
 - **IMU**: ICM-20948 (9-DoF, I2C)
 
+## Quick Start
+
+### 1. Setup enviroment
+```
+git clone https://github.com/dovantuan02/embedded-edge-ai.git
+
+cd embedded-edge-ai/application
+source env-build.sh
+```
+### 2. Build Project
+```
+make clean
+make -j2
+```
+
+### 3. Flash Firmware
+Use STM32 Programer
+```
+make flash
+```
+or use [AK-Flash](https://github.com/the-ak-foundation/ak-flash)
+```
+make flash dev=/dev/ttyUSB0
+```
+
+
 ## Reference
 
 | Topic | Link |
