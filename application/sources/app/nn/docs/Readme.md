@@ -183,6 +183,16 @@ sequenceDiagram
 
 **Figure 7:** Confusion matrix on validation set, showing per-class prediction accuracy
 
+## 8. Demo
+
+<div align="center">
+
+[![Demo Video](image/demo.mp4)](image/demo.mp4)
+
+**Video:** Real-time anomaly detection demo - motion classification on STM32L151 + ICM-20948
+
+</div>
+
 ### [Configuration parameters](../trainning/Anomaly-Detection.ipynb)
 
 | Parameter            | Value  | Description              |
@@ -197,7 +207,7 @@ sequenceDiagram
 | sampling_freq        | 58 Hz  | Sampling frequency       |
 | raw_samples_per_axis | 116    | Samples per axis         |
 
-## 8. Related Files
+## 9. Related Files
 
 | File | Role | 
 |------|------| 
@@ -207,7 +217,7 @@ sequenceDiagram
 | [Model](../inference/anomal_detect/model/anomal_detection_v1.h)       | Model weights (emlearn) |
 | [Sensor](../../task_accel_sensor.cpp)                                 | ICM-20948 driver + ring buffer |
 
-## 9. Reference
+## 10. Reference
 | Topic | Description |
 | ----- | ----------- |
 | [Emlearn](https://github.com/emlearn/emlearn) | Machine learning for microcontroller and embedded systems |
