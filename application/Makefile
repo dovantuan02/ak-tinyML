@@ -16,8 +16,8 @@ SOC_SRAM_BYTES = 16384	 # 16KB
 FLASH_BASE_ADDR_VAL = 0x08000000
 MODEL_FILE=mnist_model.h
 
-# Name of build target ex: ak-base-kit-stm32l151-application.bin
-NAME_MODULE = ak-base-kit-stm32l151-application
+# Name of build target ex: ak-base-kit-tinyml-app.bin
+NAME_MODULE = ak-base-kit-tinyml-app
 PROJECT = $(NAME_MODULE)
 
 GCC_PATH			?= /opt/gcc-arm-none-eabi-10.3-2021.10
