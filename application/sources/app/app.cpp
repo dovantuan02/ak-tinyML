@@ -273,10 +273,10 @@ int main_app() {
 		AnomalyConfidence_t conf = {0.0f};
 		conf.down = 0.45f;
 		conf.idle = 0.6f;
-		conf.left = 0.1517f;
+		conf.left = 0.15f;
 		conf.right = 0.4f;
 		conf.unknown = 0.35f;
-		conf.up = 0.06f;
+		conf.up = 0.07f;
 		((AnomalyInfer*)(infer.getInfer()))->setConfidence(conf);
 	}
 	/* start timer for application */
@@ -370,7 +370,7 @@ void task_polling_ml() {
 		float acc_y;
 		float acc_z;
 	};
-	if (ring_buffer_availble(&accel_sensor.sample_buff) < ACCEL_SAMPLE_DURATION_SECONDS * ACCEL_SAMPLE_RATE_HZ) {
+	if (ring_buffer_availble(&accel_sensor.sample_buff) < (ACCEL_SAMPLE_DURATION_SECONDS * ACCEL_SAMPLE_RATE_HZ)) {
 		return;
 	}
 
@@ -380,12 +380,12 @@ void task_polling_ml() {
 	}
 	static float buffer[ACCEL_AXES_NUM * ACCEL_SAMPLE_DURATION_SECONDS * ACCEL_SAMPLE_RATE_HZ];
 	int i = 0;
-	for (int s = 0; s < ACCEL_SAMPLE_DURATION_SECONDS * ACCEL_SAMPLE_RATE_HZ; s++) {
+	for (int s = 0; s < (ACCEL_SAMPLE_DURATION_SECONDS * ACCEL_SAMPLE_RATE_HZ); s++) {
 		buffer[i++] = last_samples[s].acc_x;
 		buffer[i++] = last_samples[s].acc_y;
 		buffer[i++] = last_samples[s].acc_z;
 	}
-	int predicted = infer.inference(buffer, ACCEL_SAMPLE_DURATION_SECONDS * ACCEL_SAMPLE_RATE_HZ);
+	int predicted = infer.inference(buffer, (ACCEL_SAMPLE_DURATION_SECONDS * ACCEL_SAMPLE_RATE_HZ));
 	last_inference_ms = now_ms;
 }
 

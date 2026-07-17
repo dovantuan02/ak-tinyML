@@ -42,7 +42,19 @@ static const char *feat_name[NUM_FEATURES_PER_AXIS] = {
     "LogBin26", "LogBin27", "LogBin28", "LogBin29"};
 static const char *axis_name[AXES] = {"X", "Y", "Z"};
 #endif
-static const char *label[MAX_PREDICT_CLASS] = {"Down", "Idle", "Left", "Right", "Unknown", "Up"};
+
+enum Class 
+{
+    Down,
+    Idle,
+    Left,
+    Right,
+    Unknown,
+    Up,
+    End
+};
+
+static const char *label[Class::End] = {"Down", "Idle", "Left", "Right", "Unknown", "Up"};
 
 /*
  * Single scratch buffer (512B) shared across the entire DSP pipeline.
@@ -266,15 +278,20 @@ int AnomalyInfer::inference(void *data, uint32_t len, float *output, uint32_t ou
             predicted = i;
         }
     }
-
+    if (predicted == Class::Right && S[Class::Left] >= confidence.left) {
+        predicted = Class::Left;
+    }
+    if (predicted == Class::Down && S[Class::Up] >= confidence.up) {
+        predicted = Class::Up;
+    }
 
     APP_DBG("Pointer [%08X]\n", (unsigned int)this);
-    APP_DBG("\tP(down)= %.3f\n", S[0]);
+    APP_DBG("\tP(unknown)= %.3f\n", S[4]);
     APP_DBG("\tP(idle)= %.3f\n", S[1]);
     APP_DBG("\tP(left)= %.3f\n", S[2]);
     APP_DBG("\tP(right)= %.3f\n", S[3]);
-    APP_DBG("\tP(unknown)= %.3f\n", S[4]);
     APP_DBG("\tP(up)= %.3f\n", S[5]);
+    APP_DBG("\tP(down)= %.3f\n", S[0]);
     APP_DBG("----> Predict= %s\n\n", predicted == -1 ? "None" : label[predicted]);
     return predicted;
 }

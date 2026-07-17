@@ -286,6 +286,7 @@ help:
 flash: all
 	$(Print) BURNING $(TARGET:.axf=.bin) to target
 ifdef dev
+	sudo fuser -k $(dev) || true
 	ak-flash $(dev) $(TARGET:.axf=.bin) $(APP_START_ADDR_VAL)
 else
 	$(PROGRAMER_PATH)/STM32_Programmer.sh -c port=SWD -w $(TARGET:.axf=.bin) $(APP_START_ADDR_VAL) -rst
