@@ -19,7 +19,7 @@
 
 /* acc: x, y, z (float * 3) */ 
 static constexpr size_t ACCEL_DATA_SIZE = (sizeof(float) * ACCEL_AXES_NUM);
-static constexpr size_t ACCEL_SAMPLE_BUFFER_SIZE = (ACCEL_SAMPLE_DURATION_SECONDS * ACCEL_SAMPLE_RATE_HZ * ACCEL_DATA_SIZE);
+static constexpr size_t ACCEL_SAMPLE_BUFFER_SIZE = (ACCEL_BUFFER_SECONDS * ACCEL_SAMPLE_RATE_HZ * ACCEL_DATA_SIZE);
 
 static uint8_t buffer[ACCEL_SAMPLE_BUFFER_SIZE];
 Accel_t accel_sensor;
@@ -61,7 +61,6 @@ void task_accel(ak_msg_t *msg)
     case AC_ACCEL_INIT:
     {
         accel_sensor.ability = AK_DISABLE;
-        accel_sensor.time_irq = 1;
 
         Wire.begin();
         Wire.setClock(50000);
@@ -187,10 +186,7 @@ void accel_timer_polling(Accel_t accel)
                     .acc_y = filt_y,
                     .acc_z = filt_z
                 };
-                if (!ring_buffer_is_full(&accel_sensor.sample_buff)) {
-                    // APP_DBG("Put data to ring buffer, size: %d\n", sizeof(icm_data));
-                    ring_buffer_put(&accel_sensor.sample_buff, &icm_data);
-                }
+                ring_buffer_put(&accel_sensor.sample_buff, &icm_data);
                 #endif
             }
 

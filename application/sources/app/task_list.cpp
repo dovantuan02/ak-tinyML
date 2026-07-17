@@ -12,7 +12,9 @@ const task_t app_task_table[] = {
 	/*************************************************************************/
 	{AC_TASK_SYSTEM_ID			,	TASK_PRI_LEVEL_2	,	task_system			},
 	{AC_TASK_FW_ID				,	TASK_PRI_LEVEL_2	,	task_fw				},
+	#if defined TASK_SHELL_EN
 	{AC_TASK_SHELL_ID			,	TASK_PRI_LEVEL_2	,	task_shell			},
+	#endif
 	{AC_TASK_LIFE_ID			,	TASK_PRI_LEVEL_6	,	task_life			},
 	{AC_TASK_IF_ID				,	TASK_PRI_LEVEL_4	,	task_if				},
 	{AC_TASK_RF24_IF_ID			,	TASK_PRI_LEVEL_4	,	task_rf24_if		},
@@ -50,7 +52,9 @@ const task_t app_task_table[] = {
 
 const task_polling_t app_task_polling_table[] = {
 	{AC_TASK_POLLING_ZIGBEE_ID	,	AK_ENABLE	,	task_polling_zigbee			},
+	#if defined TASK_SHELL_EN
 	{AC_TASK_POLLING_CONSOLE_ID	,	AK_ENABLE	,	task_polling_console		},
+	#endif
 	{AC_TASK_POLLING_ML_ID		, 	AK_ENABLE	, 	task_polling_ml				},
 	{AK_TASK_POLLING_EOT_ID		,	AK_DISABLE	,	(pf_task_polling)0			},
 };

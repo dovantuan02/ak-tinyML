@@ -7,10 +7,11 @@
 #define ACCEL_AXES_NUM                  (3)   
 #define ACCEL_SAMPLE_RATE_HZ            (57)
 #define ACCEL_SAMPLE_DURATION_SECONDS   (1)
+#define ACCEL_WINDOW_STRIDE_SECONDS     (0.5)
+#define ACCEL_BUFFER_SECONDS            (2)
 
 typedef struct {
     uint8_t ability;
-    uint32_t time_irq; // timeIrq * 10ms 
     ICM_20948_I2C icm20948;
     ring_buffer_t sample_buff;
 } Accel_t;

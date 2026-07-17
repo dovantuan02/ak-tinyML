@@ -75,6 +75,28 @@ uint8_t ring_buffer_get(ring_buffer_t* ring_buffer, void* data) {
 	return RET_RING_BUFFER_OK;
 }
 
+uint8_t ring_buffer_get_last_n(ring_buffer_t* ring_buffer, void* out, uint16_t n) {
+	uint16_t max_elements = ring_buffer->buffer_size / ring_buffer->element_size;
+	uint16_t avail = ring_buffer->fill_size;
+
+	if (n > avail || out == NULL) {
+		return RET_RING_BUFFER_NG;
+	}
+
+	uint16_t tail = ring_buffer->tail_index;
+	uint8_t* dst = (uint8_t*)out;
+
+	// Copy n elements ending at tail (most recent n), oldest first
+	for (uint16_t i = 0; i < n; i++) {
+		uint16_t idx = (tail + max_elements - n + i) % max_elements;
+		memcpy(dst + i * ring_buffer->element_size,
+		       ring_buffer->buffer + idx * ring_buffer->element_size,
+		       ring_buffer->element_size);
+	}
+
+	return RET_RING_BUFFER_OK;
+}
+
 void ring_buffer_char_init(ring_buffer_char_t* ring_buffer, void* buffer, uint16_t buffer_size) {
 	ring_buffer->tail_index = 0;
 	ring_buffer->head_index = 0;

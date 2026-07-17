@@ -42,7 +42,6 @@ class AnomalyInfer
 private:
     float features[FEATURE_LEN];
     float filter_state[6][3][2]; // 6 stages for order-6 Butterworth
-    AnomalyConfidence_t confidence;
     int extract_feature(void *data, uint32_t len);
 
 public:

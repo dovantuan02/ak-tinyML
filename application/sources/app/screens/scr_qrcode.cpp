@@ -86,7 +86,6 @@ void scr_qrcode_handle(ak_msg_t *msg) {
 
 	case AC_DISPLAY_SHOW_IDLE: {
 		APP_DBG_SIG("AC_DISPLAY_SHOW_IDLE\n");
-		SCREEN_TRAN(scr_welcome_handle, &scr_welcome);
 	} break;
 
 	case AC_DISPLAY_BUTON_UP_PRESSED:
@@ -95,7 +94,6 @@ void scr_qrcode_handle(ak_msg_t *msg) {
 		APP_DBG_SIG("AC_DISPLAY_BUTON_%s_PRESSED\n", msg->sig == AC_DISPLAY_BUTON_MODE_PRESSED ? "MODE" :\
 													 msg->sig == AC_DISPLAY_BUTON_DOWN_PRESSED ? "DOWN" : "UP");
 		timer_remove_attr(AC_TASK_DISPLAY_ID, AC_DISPLAY_SHOW_IDLE);
-		SCREEN_TRAN(scr_welcome_handle, &scr_welcome);
 	} break;
 
 	default:

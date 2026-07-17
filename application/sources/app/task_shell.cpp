@@ -26,7 +26,7 @@
 #include "task_list.h"
 
 //#pragma GCC optimize ("O3")
-
+#if defined TASK_SHELL_EN
 volatile struct shell_t shell;
 
 uint8_t buffer_console_rev[BUFFER_CONSOLE_REV_SIZE];
@@ -83,3 +83,5 @@ void task_shell(ak_msg_t* msg) {
 
 	LOGIN_PRINT("#");
 }
+
+#endif

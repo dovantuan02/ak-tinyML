@@ -158,9 +158,9 @@ int main_app() {
 
 	/* life led init */
 	led_init(&led_life, led_life_init, led_life_on, led_life_off);
-
+#if defined TASK_SHELL_EN
 	ring_buffer_char_init(&ring_buffer_console_rev, buffer_console_rev, BUFFER_CONSOLE_REV_SIZE);
-
+#endif
 	/* button init */
 	button_init(&btn_mode,	10,	BUTTON_MODE_ID,	io_button_mode_init,	io_button_mode_read,	btn_mode_callback);
 	button_init(&btn_up,	10,	BUTTON_UP_ID,	io_button_up_init,		io_button_up_read,		btn_up_callback);
@@ -271,12 +271,12 @@ int main_app() {
 #endif
 	{
 		AnomalyConfidence_t conf = {0.0f};
-		conf.idle = 0.5f;
-		conf.unknown = 0.5f;
-		conf.up = 0.3f;
-		conf.down = 0.3f;
-		conf.left = 0.1f;
-		conf.right = 0.1f;
+		conf.down = 0.1915f;
+		conf.idle = 0.45f;
+		conf.left = 0.1517f;
+		conf.right = 0.1170f;
+		conf.unknown = 0.1951f;
+		conf.up = 0.1192f;
 		((AnomalyInfer*)(infer.getInfer()))->setConfidence(conf);
 	}
 	/* start timer for application */
@@ -308,6 +308,7 @@ void task_polling_zigbee() {
 #endif
 }
 
+#if defined TASK_SHELL_EN
 void task_polling_console() {
 	volatile uint8_t c = 0;
 
@@ -354,38 +355,39 @@ void task_polling_console() {
 #endif
 	}
 }
+#endif
 
 void task_polling_ml() {
+	static uint32_t last_inference_ms = 0;
+	uint32_t now_ms = sys_ctrl_millis();
+
+	if ((now_ms - last_inference_ms) < (uint32_t)(ACCEL_WINDOW_STRIDE_SECONDS * 1000)) {
+		return;
+	}
+
 	struct icm_data_internal_t {
 		float acc_x;
 		float acc_y;
 		float acc_z;
 	};
-	if (ring_buffer_is_empty(&accel_sensor.sample_buff)) {
+	if (ring_buffer_availble(&accel_sensor.sample_buff) < ACCEL_SAMPLE_DURATION_SECONDS * ACCEL_SAMPLE_RATE_HZ) {
 		return;
 	}
 
-	struct icm_data_internal_t icm_data;
-	if (ring_buffer_is_full(&accel_sensor.sample_buff)) {
-		/* array buffer x, y, z with 1s and 57Hz */
-		float buffer[ACCEL_AXES_NUM * ACCEL_SAMPLE_DURATION_SECONDS * ACCEL_SAMPLE_RATE_HZ];
-		int i = 0;
-		while (!ring_buffer_is_empty(&accel_sensor.sample_buff)) {
-			ring_buffer_get(&accel_sensor.sample_buff, &icm_data);
-			buffer[i++] = icm_data.acc_x;
-			buffer[i++] = icm_data.acc_y;
-			buffer[i++] = icm_data.acc_z;
-		}
-		float output[infer.getMaxPredictClass()];
-		int result = infer.inference(buffer, ACCEL_SAMPLE_DURATION_SECONDS * ACCEL_SAMPLE_RATE_HZ, output, infer.getMaxPredictClass());
-		// APP_DBG("Inference result: %d\n", result);
-		// view_render.setCursor(0, 50);
-		// for (int i = 0; i < infer.getMaxPredictClass(); i++) {
-		// 	char buf[32];
-		// 	snprintf(buf, sizeof(buf), "Class %d: %.4f", i, output[i]);
-		// 	view_render.print(buf);
-		// }
+	/* Sliding window: peek last 1s of data, keep buffer intact for overlap */
+	static struct icm_data_internal_t last_samples[ACCEL_SAMPLE_DURATION_SECONDS * ACCEL_SAMPLE_RATE_HZ];
+	if (ring_buffer_get_last_n(&accel_sensor.sample_buff, last_samples, ACCEL_SAMPLE_DURATION_SECONDS * ACCEL_SAMPLE_RATE_HZ) != RET_RING_BUFFER_OK) {
+		return;
 	}
+	static float buffer[ACCEL_AXES_NUM * ACCEL_SAMPLE_DURATION_SECONDS * ACCEL_SAMPLE_RATE_HZ];
+	int i = 0;
+	for (int s = 0; s < ACCEL_SAMPLE_DURATION_SECONDS * ACCEL_SAMPLE_RATE_HZ; s++) {
+		buffer[i++] = last_samples[s].acc_x;
+		buffer[i++] = last_samples[s].acc_y;
+		buffer[i++] = last_samples[s].acc_z;
+	}
+	int predicted = infer.inference(buffer, ACCEL_SAMPLE_DURATION_SECONDS * ACCEL_SAMPLE_RATE_HZ);
+	last_inference_ms = now_ms;
 }
 
 /*****************************************************************************/

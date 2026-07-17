@@ -19,7 +19,9 @@ enum {
 	/* APP TASKS */
 	AC_TASK_SYSTEM_ID,
 	AC_TASK_FW_ID,
+	#if defined TASK_SHELL_EN
 	AC_TASK_SHELL_ID,
+	#endif
 	AC_TASK_LIFE_ID,
 	AC_TASK_IF_ID,
 	AC_TASK_RF24_IF_ID,
@@ -72,7 +74,9 @@ enum {
 /* APP TASKS */
 extern void task_system(ak_msg_t*);
 extern void task_fw(ak_msg_t*);
+#if defined TASK_SHELL_EN
 extern void task_shell(ak_msg_t*);
+#endif
 extern void task_life(ak_msg_t*);
 extern void task_if(ak_msg_t*);
 extern void task_rf24_if(ak_msg_t*);
@@ -100,7 +104,9 @@ extern void task_rf24_demo(ak_msg_t*);
  */
 /*****************************************************************************/
 extern void task_polling_zigbee();
+#if defined TASK_SHELL_EN
 extern void task_polling_console();
+#endif
 #ifdef __cplusplus
 extern "C" {
 #endif

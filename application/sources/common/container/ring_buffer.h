@@ -36,6 +36,7 @@ extern bool		ring_buffer_is_empty(ring_buffer_t* ring_buffer);
 extern bool		ring_buffer_is_full(ring_buffer_t* ring_buffer);
 extern uint8_t	ring_buffer_put(ring_buffer_t* ring_buffer, void* data);
 extern uint8_t	ring_buffer_get(ring_buffer_t* ring_buffer, void* data);
+extern uint8_t	ring_buffer_get_last_n(ring_buffer_t* ring_buffer, void* out, uint16_t n);
 
 extern void		ring_buffer_char_init(ring_buffer_char_t* ring_buffer, void* buffer, uint16_t buffer_size);
 extern uint16_t	ring_buffer_char_availble(ring_buffer_char_t* ring_buffer);

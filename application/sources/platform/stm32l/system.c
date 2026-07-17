@@ -409,7 +409,11 @@ void uart1_irq() {
 
 	if (USART_GetITStatus(USARTx, USART_IT_RXNE) == SET) {
 		/* DO NOT clear pending interrupt right here ! */
+#if defined TASK_SHELL_EN
 		sys_irq_shell();
+#else
+		sys_ctrl_shell_get_char();
+#endif
 	}
 
 	if (USART_GetITStatus(USARTx, USART_IT_TXE) == SET) {

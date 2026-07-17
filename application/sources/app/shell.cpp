@@ -46,7 +46,7 @@
 #include "buzzer.h"
 
 #include "qrcode.h"
-
+#if defined TASK_SHELL_EN
 /*****************************************************************************/
 /*  local declare
  */
@@ -976,4 +976,6 @@ int32_t shell_modbus(uint8_t* argv) {
 
 	return 0;
 }
+#endif
+
 #endif
