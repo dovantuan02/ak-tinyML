@@ -43,6 +43,7 @@ void scr_startup_handle(ak_msg_t *msg) {
 		view_render.initialize();
 		view_render_display_on();
 		timer_set(AC_TASK_DISPLAY_ID, AC_DISPLAY_SHOW_LOGO, AC_DISPLAY_STARTUP_INTERVAL, TIMER_ONE_SHOT);
+		task_post_pure_msg(AC_TASK_ACCEL_ID, AC_ACCEL_INIT);
 	} break;
 
 	case AC_DISPLAY_BUTON_MODE_PRESSED: {

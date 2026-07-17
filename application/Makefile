@@ -239,6 +239,7 @@ LDFLAGS	=	-Map=$(OBJECTS_DIR)/$(PROJECT).map	\
 		$(LIBC) $(LIBM) $(LIBSTDCPP_NANO) $(LIBGCC) $(LIBGCOV) $(LIBFPU) $(LIBRDPMON)
 
 all: create $(TARGET) info
+	@cp $(TARGET) ../hardware/bin/
 
 create:
 	$(Print) CREATE $(OBJECTS_DIR) folder

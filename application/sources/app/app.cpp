@@ -63,6 +63,7 @@
 #include "utils.h"
 
 #include "nn_infer.h"
+#include "anomal_detect.h"
 /* ----------------------- Platform includes --------------------------------*/
 
 /* ----------------------- Modbus includes ----------------------------------*/
@@ -268,6 +269,16 @@ int main_app() {
 		APP_PRINT("NG\n");
 	}
 #endif
+	{
+		AnomalyConfidence_t conf = {0.0f};
+		conf.idle = 0.5f;
+		conf.unknown = 0.5f;
+		conf.up = 0.3f;
+		conf.down = 0.3f;
+		conf.left = 0.1f;
+		conf.right = 0.1f;
+		((AnomalyInfer*)(infer.getInfer()))->setConfidence(conf);
+	}
 	/* start timer for application */
 	app_init_state_machine();
 	app_start_timer();
@@ -346,13 +357,9 @@ void task_polling_console() {
 
 void task_polling_ml() {
 	struct icm_data_internal_t {
-		int16_t acc_x;
-		int16_t acc_y;
-		int16_t acc_z;
-		int16_t gyro_x;
-		int16_t gyro_y;
-		int16_t gyro_z;
-
+		float acc_x;
+		float acc_y;
+		float acc_z;
 	};
 	if (ring_buffer_is_empty(&accel_sensor.sample_buff)) {
 		return;
@@ -360,8 +367,8 @@ void task_polling_ml() {
 
 	struct icm_data_internal_t icm_data;
 	if (ring_buffer_is_full(&accel_sensor.sample_buff)) {
-		/* array buffer x, y, z with 2s and 58Hz */
-		int16_t buffer[ACCEL_AXES_NUM * ACCEL_SAMPLE_DURATION_SECONDS * ACCEL_SAMPLE_RATE_HZ];
+		/* array buffer x, y, z with 1s and 57Hz */
+		float buffer[ACCEL_AXES_NUM * ACCEL_SAMPLE_DURATION_SECONDS * ACCEL_SAMPLE_RATE_HZ];
 		int i = 0;
 		while (!ring_buffer_is_empty(&accel_sensor.sample_buff)) {
 			ring_buffer_get(&accel_sensor.sample_buff, &icm_data);
@@ -369,7 +376,15 @@ void task_polling_ml() {
 			buffer[i++] = icm_data.acc_y;
 			buffer[i++] = icm_data.acc_z;
 		}
-		infer.inference(buffer, ACCEL_SAMPLE_DURATION_SECONDS * ACCEL_SAMPLE_RATE_HZ);
+		float output[infer.getMaxPredictClass()];
+		int result = infer.inference(buffer, ACCEL_SAMPLE_DURATION_SECONDS * ACCEL_SAMPLE_RATE_HZ, output, infer.getMaxPredictClass());
+		// APP_DBG("Inference result: %d\n", result);
+		// view_render.setCursor(0, 50);
+		// for (int i = 0; i < infer.getMaxPredictClass(); i++) {
+		// 	char buf[32];
+		// 	snprintf(buf, sizeof(buf), "Class %d: %.4f", i, output[i]);
+		// 	view_render.print(buf);
+		// }
 	}
 }
 
@@ -403,7 +418,6 @@ void app_task_init() {
 
 	task_post_pure_msg(AC_TASK_RF24_IF_ID, AC_RF24_IF_INIT_NETWORK);
 	task_post_pure_msg(AC_TASK_UART_IF_ID, AC_UART_IF_INIT);
-	task_post_pure_msg(AC_TASK_ACCEL_ID, AC_ACCEL_INIT);
 }
 
 /*****************************************************************************/

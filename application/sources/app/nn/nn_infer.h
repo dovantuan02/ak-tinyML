@@ -21,6 +21,9 @@ public:
     const void *getInfer();
 
     int inference(void *data, uint32_t len);
+    int inference(void *data, uint32_t len, float *output, uint32_t output_len);
+
+    int getMaxPredictClass();
 };
 
 #endif

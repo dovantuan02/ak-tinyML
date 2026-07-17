@@ -12,14 +12,47 @@
 #include "Wire.h"
 #include "sys_ctrl.h"
 
-#define SCALE_UP(x) ((x) * 9.80665f)
+#define EKF_N 3
+#define EKF_M 3
 
-/* acc: x, y, z (16bit * 3), gyro: x, y, z (16bit * 3) */ 
-static constexpr size_t ACCEL_DATA_SIZE = (sizeof(int16_t) * ACCEL_AXES_NUM + sizeof(int16_t) * ACCEL_AXES_NUM);
+#include "tinyekf.h"
+
+/* acc: x, y, z (float * 3) */ 
+static constexpr size_t ACCEL_DATA_SIZE = (sizeof(float) * ACCEL_AXES_NUM);
 static constexpr size_t ACCEL_SAMPLE_BUFFER_SIZE = (ACCEL_SAMPLE_DURATION_SECONDS * ACCEL_SAMPLE_RATE_HZ * ACCEL_DATA_SIZE);
 
 static uint8_t buffer[ACCEL_SAMPLE_BUFFER_SIZE];
 Accel_t accel_sensor;
+
+static const float EPS = 1e-4;
+
+static const float Q[EKF_N*EKF_N] = {
+    EPS, 0,   0,
+    0,   EPS, 0,
+    0,   0,   EPS
+};
+
+static const float R[EKF_M*EKF_M] = {
+    0.01f, 0,    0,
+    0,     0.01f, 0,
+    0,     0,    0.01f
+};
+
+// Process model Jacobian: constant acceleration (identity)
+static const float F[EKF_N*EKF_N] = {
+    1, 0, 0,
+    0, 1, 0,
+    0, 0, 1
+};
+
+// Observation Jacobian: state directly observable
+static const float H[EKF_M*EKF_N] = {
+    1, 0, 0,
+    0, 1, 0,
+    0, 0, 1
+};
+
+static ekf_t _ekf;
 
 void task_accel(ak_msg_t *msg)
 {
@@ -43,6 +76,10 @@ void task_accel(ak_msg_t *msg)
         task_post_pure_msg(AC_TASK_ACCEL_ID, AC_ACCEL_SET_CONFIG);
         APP_DBG("Init ring buffer: %d bytes\n", sizeof(buffer));
         ring_buffer_init(&accel_sensor.sample_buff, buffer, sizeof(buffer), ACCEL_DATA_SIZE);
+
+        float pdiag[EKF_N] = {1.0f, 1.0f, 1.0f};
+        ekf_initialize(&_ekf, pdiag);
+        APP_DBG("EKF initialized: N=%d, M=%d\n", EKF_N, EKF_M);
     }
     break;
 
@@ -110,13 +147,9 @@ void task_accel(ak_msg_t *msg)
 void accel_timer_polling(Accel_t accel)
 {
     struct icm_data_internal_t {
-        int16_t acc_x;
-        int16_t acc_y;
-        int16_t acc_z;
-        int16_t gyro_x;
-        int16_t gyro_y;
-        int16_t gyro_z;
-
+        float acc_x;
+        float acc_y;
+        float acc_z;
     };
     if (accel.ability == AK_ENABLE)
     {
@@ -129,24 +162,34 @@ void accel_timer_polling(Accel_t accel)
         {
             if ((data.header & DMP_header_bitmap_Accel) > 0)
             {
-                x = SCALE_UP((float)data.Raw_Accel.Data.X);
-                y = SCALE_UP((float)data.Raw_Accel.Data.Y);
-                z = SCALE_UP((float)data.Raw_Accel.Data.Z);
+                x = (float)data.Raw_Accel.Data.X;
+                y = (float)data.Raw_Accel.Data.Y;
+                z = (float)data.Raw_Accel.Data.Z;
+
+                // EKF predict: constant acceleration model
+                float fx[EKF_N] = { _ekf.x[0], _ekf.x[1], _ekf.x[2] };
+                ekf_predict(&_ekf, fx, F, Q);
+
+                // EKF update: fuse raw measurement
+                float z_obs[EKF_M] = { x, y, z };
+                float hx[EKF_M] = { _ekf.x[0], _ekf.x[1], _ekf.x[2] };
+                ekf_update(&_ekf, z_obs, hx, H, R);
+
+                float filt_x = _ekf.x[0];
+                float filt_y = _ekf.x[1];
+                float filt_z = _ekf.x[2];
 
                 #if 0
-                xfprintf((void (*)(int))sys_ctrl_shell_put_char, "%.1f,%.1f,%.1f\n", x, y, z);
+                xfprintf((void (*)(int))sys_ctrl_shell_put_char, "%.1f,%.1f,%.1f\n", filt_x, filt_y, filt_z);
                 #else
                 struct icm_data_internal_t icm_data = {
-                    .acc_x = data.Raw_Accel.Data.X,
-                    .acc_y = data.Raw_Accel.Data.Y,
-                    .acc_z = data.Raw_Accel.Data.Z,
-                    .gyro_x = 0,
-                    .gyro_y = 0,
-                    .gyro_z = 0
+                    .acc_x = filt_x,
+                    .acc_y = filt_y,
+                    .acc_z = filt_z
                 };
                 if (!ring_buffer_is_full(&accel_sensor.sample_buff)) {
+                    // APP_DBG("Put data to ring buffer, size: %d\n", sizeof(icm_data));
                     ring_buffer_put(&accel_sensor.sample_buff, &icm_data);
-                    // APP_DBG("Put data to ring buffer: %d bytes, ringAvail: %d\n", sizeof(icm_data), ring_buffer_availble(&accel_sensor.sample_buff));
                 }
                 #endif
             }

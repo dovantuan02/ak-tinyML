@@ -5,8 +5,8 @@
 #include "ring_buffer.h"
 
 #define ACCEL_AXES_NUM                  (3)   
-#define ACCEL_SAMPLE_RATE_HZ            (58)
-#define ACCEL_SAMPLE_DURATION_SECONDS   (2)
+#define ACCEL_SAMPLE_RATE_HZ            (57)
+#define ACCEL_SAMPLE_DURATION_SECONDS   (1)
 
 typedef struct {
     uint8_t ability;

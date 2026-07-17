@@ -15,7 +15,11 @@ VPATH += sources/libraries/SparkFun_ICM-20948_ArduinoLibrary/src/util
 SOURCES 	+= sources/libraries/SparkFun_ICM-20948_ArduinoLibrary/src/util/ICM_20948_C.c
 SOURCES_CPP += sources/libraries/SparkFun_ICM-20948_ArduinoLibrary/src/ICM_20948.cpp
 
-#Submodules emlearn
+# Submodules emlearn
 CFLAGS += -I./sources/libraries/emlearn/emlearn
 CPPFLAGS += -I./sources/libraries/emlearn/emlearn
+
+# Submodules kalman filter
+CFLAGS += -I./sources/libraries/TinyEKF/src
+CPPFLAGS += -I./sources/libraries/TinyEKF/src
 

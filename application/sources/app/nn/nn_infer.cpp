@@ -52,3 +52,25 @@ int NNInfer::inference(void *data, uint32_t len)
     }
     return -1;
 }
+
+int NNInfer::inference(void *data, uint32_t len, float *output, uint32_t output_len) {
+    switch (modelName)
+    {
+    case AnomalyDetect:
+        return ((AnomalyInfer *)infer)->inference(data, len, output, output_len);
+    default:
+        break;
+    }
+    return -1;
+}
+
+int NNInfer::getMaxPredictClass() {
+    switch (modelName)
+    {
+    case AnomalyDetect:
+        return AnomalyInfer::getMaxPredictClass();
+    default:
+        break;
+    }
+    return -1;
+}
