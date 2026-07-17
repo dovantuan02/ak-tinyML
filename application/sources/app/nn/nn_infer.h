@@ -5,7 +5,7 @@
 enum eModelName
 {
     ImpactDetect,
-    AnomalyDetect,
+    MotionDirectDetect,
 };
 
 class NNInfer

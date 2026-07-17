@@ -1,5 +1,4 @@
-# include sources/app/nn/inference/impact_detect/Makefile.mk
-include sources/app/nn/inference/anomal_detect/Makefile.mk
+include sources/app/nn/inference/motion_direct_classify/Makefile.mk
 
 CFLAGS		+= -I./sources/app/nn
 CPPFLAGS	+= -I./sources/app/nn

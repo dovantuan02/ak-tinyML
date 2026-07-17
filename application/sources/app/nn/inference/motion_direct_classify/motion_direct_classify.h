@@ -35,9 +35,9 @@ typedef struct
             float up;
         };
     };
-} AnomalyConfidence_t;
+} MotionDirectConfidence_t;
 
-class AnomalyInfer
+class MotionDirectInfer
 {
 private:
     float features[FEATURE_LEN];
@@ -45,11 +45,11 @@ private:
     int extract_feature(void *data, uint32_t len);
 
 public:
-    AnomalyInfer();
-    ~AnomalyInfer();
+    MotionDirectInfer();
+    ~MotionDirectInfer();
     int inference(void *data, uint32_t len);
     int inference(void *data, uint32_t len, float *output, uint32_t output_len);
-    int setConfidence(AnomalyConfidence_t conf);
+    int setConfidence(MotionDirectConfidence_t conf);
     static int getMaxPredictClass();
 };
 

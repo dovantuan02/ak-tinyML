@@ -1,4 +1,4 @@
-# Anomaly Detection
+# Motion Direct Classification
 
 ## 1. Overview
 <div align="center">
@@ -52,7 +52,7 @@ Endpoints:
 [SER] Detected data frequency: 57Hz
 ? 3 sensor axes detected (example values: [2569.3,-4903.3,74510.9]). What do you want to call them? Separate the
  names with ',': x,y,z
-[WS ] Device "anomaly" is now connected to project "Anomaly-Detection". To connect to another project, run `edge-impulse-data-forwarder --clean`.
+[WS ] Device "anomaly" is now connected to project "MotionDirect-Detection". To connect to another project, run `edge-impulse-data-forwarder --clean`.
 [WS ] Go to https://studio.edgeimpulse.com/studio/1046470/acquisition/training to build your machine learning model!
 
 ```
@@ -60,7 +60,7 @@ Endpoints:
 
 ![Device connected successfully](image/edge-impulse-connect-device-success.png)
 
-**Figure 2:** Terminal confirming successful device connection to "Anomaly-Detection" project on Edge Impulse
+**Figure 2:** Terminal confirming successful device connection to "MotionDirect-Detection" project on Edge Impulse
 
 ![Data collection UI](image/edge-impulse-collect-data-01.png)
 
@@ -143,7 +143,7 @@ sequenceDiagram
     participant Sensor
     participant RB as Ring Buffer
     participant Task as Polling ML
-    participant Infer as AnomalyInfer::inference()
+    participant Infer as MotionDirectInfer::inference()
     participant DSP as Feature Extraction
     participant Norm as Feature Normalization
     participant NN as Nerual Netron
@@ -187,7 +187,7 @@ sequenceDiagram
 
 [![Demo](image/title.png)](https://github.com/user-attachments/assets/3420db6c-671e-4b4b-a058-6ce20dbc7669)
 
-### [Configuration parameters](../trainning/Anomaly-Detection.ipynb)
+### [Configuration parameters](../trainning/MotionDirect-Detection.ipynb)
 
 | Parameter            | Value  | Description              |
 |----------------------|--------|--------------------------|
@@ -205,9 +205,9 @@ sequenceDiagram
 
 | File | Role | 
 |------|------| 
-| [Trainning-Anomaly-Detection](../trainning/Anomaly-Detection.ipynb)   | Training pipeline |
+| [Trainning-MotionDirect-Detection](../trainning/MotionDirect-Detection.ipynb)   | Training pipeline |
 | [Dataset](../trainning/anomaly-detection-export)                      | Dataset export |
-| [Anomal-Implement](../inference/anomal_detect)                        | AnomalyInfer class header |
+| [Anomal-Implement](../inference/anomal_detect)                        | MotionDirectInfer class header |
 | [Model](../inference/anomal_detect/model/anomal_detection_v1.h)       | Model weights (emlearn) |
 | [Sensor](../../task_accel_sensor.cpp)                                 | ICM-20948 driver + ring buffer |
 
@@ -216,4 +216,4 @@ sequenceDiagram
 | ----- | ----------- |
 | [Emlearn](https://github.com/emlearn/emlearn) | Machine learning for microcontroller and embedded systems |
 | [EdgeImpulse](https://www.edgeimpulse.com) | Collect Data |
-| [Arduino Anomaly Detection](https://www.hackster.io/mjrobot/tinyml-made-easy-anomaly-detection-motion-classification-958fd2) | Arduino make Tiny ML |
+| [Arduino MotionDirect Detection](https://www.hackster.io/mjrobot/tinyml-made-easy-anomaly-detection-motion-classification-958fd2) | Arduino make Tiny ML |

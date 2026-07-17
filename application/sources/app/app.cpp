@@ -63,7 +63,7 @@
 #include "utils.h"
 
 #include "nn_infer.h"
-#include "anomal_detect.h"
+#include "motion_direct_classify.h"
 /* ----------------------- Platform includes --------------------------------*/
 
 /* ----------------------- Modbus includes ----------------------------------*/
@@ -79,7 +79,7 @@
 
 #include "Wire.h"
 
-static NNInfer infer(AnomalyDetect);
+static NNInfer infer(MotionDirectDetect);
 /* ----------------------- Json includes ------------------------------------*/
 //#include "json.hpp"
 
@@ -270,14 +270,14 @@ int main_app() {
 	}
 #endif
 	{
-		AnomalyConfidence_t conf = {0.0f};
+		MotionDirectConfidence_t conf = {0.0f};
 		conf.down = 0.45f;
 		conf.idle = 0.6f;
 		conf.left = 0.15f;
 		conf.right = 0.4f;
 		conf.unknown = 0.35f;
 		conf.up = 0.07f;
-		((AnomalyInfer*)(infer.getInfer()))->setConfidence(conf);
+		((MotionDirectInfer*)(infer.getInfer()))->setConfidence(conf);
 	}
 	/* start timer for application */
 	app_init_state_machine();

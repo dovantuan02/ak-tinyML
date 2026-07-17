@@ -1,15 +1,15 @@
 #include "app_dbg.h"
 
 #include "nn_infer.h"
-#include "anomal_detect.h"
+#include "motion_direct_classify.h"
 
 NNInfer::NNInfer(enum eModelName model)
 {
     modelName = model;
     switch (model)
     {
-    case AnomalyDetect:
-        infer = new AnomalyInfer();
+    case MotionDirectDetect:
+        infer = new MotionDirectInfer();
         break;
     default:
         break;
@@ -24,9 +24,9 @@ NNInfer::~NNInfer()
     {
         switch (modelName)
         {
-        case AnomalyDetect:
+        case MotionDirectDetect:
         {
-            AnomalyInfer *p = static_cast<AnomalyInfer *>(infer);
+            MotionDirectInfer *p = static_cast<MotionDirectInfer *>(infer);
             delete p;
             break;
         }
@@ -45,8 +45,8 @@ int NNInfer::inference(void *data, uint32_t len)
 {
     switch (modelName)
     {
-    case AnomalyDetect:
-        return ((AnomalyInfer *)infer)->inference(data, len);
+    case MotionDirectDetect:
+        return ((MotionDirectInfer *)infer)->inference(data, len);
     default:
         break;
     }
@@ -56,8 +56,8 @@ int NNInfer::inference(void *data, uint32_t len)
 int NNInfer::inference(void *data, uint32_t len, float *output, uint32_t output_len) {
     switch (modelName)
     {
-    case AnomalyDetect:
-        return ((AnomalyInfer *)infer)->inference(data, len, output, output_len);
+    case MotionDirectDetect:
+        return ((MotionDirectInfer *)infer)->inference(data, len, output, output_len);
     default:
         break;
     }
@@ -67,8 +67,8 @@ int NNInfer::inference(void *data, uint32_t len, float *output, uint32_t output_
 int NNInfer::getMaxPredictClass() {
     switch (modelName)
     {
-    case AnomalyDetect:
-        return AnomalyInfer::getMaxPredictClass();
+    case MotionDirectDetect:
+        return MotionDirectInfer::getMaxPredictClass();
     default:
         break;
     }
