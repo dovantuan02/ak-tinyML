@@ -9,8 +9,8 @@
 #include "arm_math.h"
 #include "arm_const_structs.h"
 
-#include "anomal_detect.h"
-#include "model/anomal_detection_v2.h"
+#include "motion_direct_classify.h"
+#include "model/motion_direct_classify_model.h"
 
 #define DBG
 #define PI                      (3.14159265358979f)
@@ -23,8 +23,8 @@
 #define STRIDE                  (FFT_LENGTH - FFT_OVERLAP)
 #define NUM_FEATURES_PER_AXIS   (FEATURES_PER_AXIS)
 
-static const float NORM_MEAN[FEATURE_LEN] = { 0.0669f, 0.1738f, 5.2485f, 3.7878f, 14.4462f, -4.1222f, -4.6421f, -5.1395f, -5.5968f, -5.9357f, -6.0622f, -6.1874f, -6.3572f, -6.4215f, -6.5790f, -6.7188f, -6.8398f, -6.9406f, -6.9518f, -7.0500f, -7.1559f, -7.2882f, -7.3951f, -7.4870f, -7.5691f, -7.5508f, -7.5463f, -7.6120f, -7.5573f, -7.4724f, -7.3654f, -7.1272f, -6.6688f, -6.4123f, 0.0583f, 0.1580f, 4.6086f, 3.6372f, 13.3304f, -4.3380f, -4.5710f, -5.0734f, -5.5681f, -6.0614f, -6.1537f, -6.3035f, -6.6414f, -6.8312f, -6.8672f, -6.9576f, -7.0520f, -7.2260f, -7.2503f, -7.3862f, -7.4617f, -7.5752f, -7.6817f, -7.7433f, -7.8727f, -7.7652f, -7.7125f, -7.7710f, -7.8106f, -7.6888f, -7.6774f, -7.4669f, -7.1044f, -6.8000f, 0.0958f, -0.7458f, 8.2619f, 3.5773f, 12.7493f, -3.9753f, -4.2723f, -4.8114f, -5.3511f, -5.7927f, -5.9193f, -6.0949f, -6.4645f, -6.5443f, -6.6348f, -6.6979f, -6.8534f, -7.0364f, -7.0515f, -7.1267f, -7.2174f, -7.4396f, -7.5920f, -7.6500f, -7.7033f, -7.6226f, -7.6658f, -7.5946f, -7.5576f, -7.3755f, -7.0929f, -6.6543f, -5.8833f, -5.4287f };
-static const float NORM_SCALE[FEATURE_LEN] = { 12.056205f, 0.578546f, 0.092263f, 1.257445f, 0.165083f, 0.630276f, 0.542757f, 0.598432f, 0.624738f, 0.590015f, 0.654539f, 0.712412f, 0.695580f, 0.678122f, 0.706663f, 0.752415f, 0.745583f, 0.712384f, 0.718260f, 0.759052f, 0.761302f, 0.748098f, 0.775649f, 0.790582f, 0.782086f, 0.848281f, 0.887050f, 0.920041f, 0.927283f, 1.055457f, 1.041128f, 1.104285f, 1.001500f, 0.892369f, 15.250112f, 0.626451f, 0.104837f, 1.139051f, 0.159177f, 0.557385f, 0.543008f, 0.610003f, 0.591315f, 0.590931f, 0.683465f, 0.737082f, 0.708660f, 0.695991f, 0.695844f, 0.728669f, 0.756773f, 0.745758f, 0.754460f, 0.746801f, 0.795571f, 0.762912f, 0.813349f, 0.800823f, 0.832173f, 0.865386f, 0.881494f, 0.948908f, 0.917318f, 1.015059f, 0.943331f, 1.003951f, 0.950474f, 0.937689f, 12.226880f, 0.537049f, 0.092244f, 1.231915f, 0.172753f, 0.567972f, 0.516567f, 0.554304f, 0.547391f, 0.541672f, 0.612458f, 0.672488f, 0.650616f, 0.691378f, 0.650743f, 0.681940f, 0.673731f, 0.642951f, 0.703408f, 0.755098f, 0.802148f, 0.733789f, 0.786492f, 0.770973f, 0.805104f, 0.848502f, 0.856631f, 0.898702f, 0.963483f, 1.039960f, 1.038607f, 1.017320f, 0.916749f, 0.893665f };
+static const float NORM_MEAN[FEATURE_LEN] = { 0.0719f, 0.0995f, 5.4490f, 3.7382f, 14.1261f, -4.1330f, -4.6119f, -5.0993f, -5.5457f, -5.9415f, -5.9847f, -6.1570f, -6.3290f, -6.4163f, -6.5327f, -6.6496f, -6.8356f, -6.9605f, -6.9696f, -7.0329f, -7.1368f, -7.2549f, -7.3616f, -7.4406f, -7.5584f, -7.4952f, -7.5771f, -7.5810f, -7.5687f, -7.4534f, -7.3262f, -7.0873f, -6.5876f, -6.3079f, 0.0616f, 0.3180f, 4.3104f, 3.6315f, 13.2231f, -4.2367f, -4.4527f, -5.0283f, -5.5915f, -6.0301f, -6.1213f, -6.2787f, -6.6258f, -6.8237f, -6.8758f, -6.9498f, -7.0438f, -7.1553f, -7.2402f, -7.3665f, -7.4572f, -7.6275f, -7.6902f, -7.7489f, -7.8501f, -7.7773f, -7.7671f, -7.7868f, -7.8238f, -7.6918f, -7.6657f, -7.4611f, -7.0845f, -6.7806f, 0.0884f, -0.7941f, 8.3792f, 3.6272f, 13.1404f, -4.0610f, -4.4105f, -4.8474f, -5.3470f, -5.8370f, -5.9737f, -6.1889f, -6.5016f, -6.5925f, -6.6847f, -6.7785f, -6.9151f, -7.0467f, -7.0616f, -7.1657f, -7.2663f, -7.4458f, -7.5853f, -7.7055f, -7.7336f, -7.6476f, -7.6204f, -7.6253f, -7.5314f, -7.3482f, -7.1613f, -6.6685f, -5.9613f, -5.5504f };
+static const float NORM_SCALE[FEATURE_LEN] = { 10.313805f, 0.569355f, 0.092169f, 1.193996f, 0.158709f, 0.610087f, 0.543415f, 0.589654f, 0.611746f, 0.578238f, 0.649009f, 0.701902f, 0.691730f, 0.646156f, 0.679985f, 0.719828f, 0.723761f, 0.681535f, 0.737040f, 0.756151f, 0.739874f, 0.706928f, 0.755724f, 0.760480f, 0.795412f, 0.829065f, 0.845690f, 0.904734f, 0.940804f, 1.030589f, 1.050383f, 1.101235f, 1.015256f, 0.904591f, 16.746591f, 0.652848f, 0.108822f, 1.121137f, 0.157254f, 0.548363f, 0.548704f, 0.613974f, 0.596110f, 0.585630f, 0.689988f, 0.759718f, 0.702491f, 0.701941f, 0.720634f, 0.742164f, 0.754096f, 0.749647f, 0.744423f, 0.757681f, 0.792686f, 0.767760f, 0.814712f, 0.824135f, 0.832778f, 0.851554f, 0.864281f, 0.897256f, 0.881747f, 0.974453f, 0.923679f, 0.985914f, 0.949842f, 0.909363f, 13.276666f, 0.537950f, 0.090665f, 1.268610f, 0.173435f, 0.575975f, 0.502935f, 0.558554f, 0.558281f, 0.543968f, 0.627195f, 0.652300f, 0.657518f, 0.709448f, 0.667345f, 0.701980f, 0.694616f, 0.660147f, 0.701925f, 0.736040f, 0.825578f, 0.762393f, 0.813294f, 0.766670f, 0.844944f, 0.883073f, 0.921908f, 0.944610f, 1.029522f, 1.062279f, 1.117482f, 1.038127f, 0.866381f, 0.824607f };
 
 static const float BIQUAD_COEFFS_DF2T[3][5] = {
     {5.923946358216797e-01f, 1.184789271643359e+00f, 5.923946358216797e-01f, -1.532692598430516e+00f, -5.902995029924591e-01f},
@@ -66,7 +66,7 @@ static const char *label[Class::End] = {"Down", "Idle", "Left", "Right", "Unknow
  *   5. S[0->5]   = model output (during inference)
  */
 static float S[2 * FFT_LENGTH];
-static AnomalyConfidence_t confidence;
+static MotionDirectConfidence_t confidence;
 
 static void welch_max_hold_inplace(uint32_t n)
 {
@@ -183,7 +183,7 @@ static void extract_axis_features(uint32_t n, float state[3][2], float *out)
     }
 }
 
-AnomalyInfer::AnomalyInfer()
+MotionDirectInfer::MotionDirectInfer()
 {
     for (int i = 0; i < FEATURE_LEN; i++)
     {
@@ -192,11 +192,11 @@ AnomalyInfer::AnomalyInfer()
     memset(filter_state, 0, sizeof(filter_state));
 }
 
-AnomalyInfer::~AnomalyInfer()
+MotionDirectInfer::~MotionDirectInfer()
 {
 }
 
-int AnomalyInfer::extract_feature(void *data, uint32_t len)
+int MotionDirectInfer::extract_feature(void *data, uint32_t len)
 {
     memset(filter_state, 0, sizeof(filter_state));
     if (len != RAW_SAMPLES_PER_AXIS)
@@ -222,12 +222,12 @@ int AnomalyInfer::extract_feature(void *data, uint32_t len)
     return 0;
 }
 
-int AnomalyInfer::inference(void *data, uint32_t len)
+int MotionDirectInfer::inference(void *data, uint32_t len)
 {
     return inference(data, len, NULL, 0);
 }
 
-int AnomalyInfer::inference(void *data, uint32_t len, float *output, uint32_t output_len) 
+int MotionDirectInfer::inference(void *data, uint32_t len, float *output, uint32_t output_len) 
 {
     uint32_t prev = sys_ctrl_millis();
 
@@ -236,7 +236,7 @@ int AnomalyInfer::inference(void *data, uint32_t len, float *output, uint32_t ou
         return -1;
     }
 
-    APP_DBG("- Anomaly Features:\n");
+    APP_DBG("- MotionDirect Features:\n");
 #ifdef DBG
     for (int axis = 0; axis < AXES; axis++)
     {
@@ -254,7 +254,7 @@ int AnomalyInfer::inference(void *data, uint32_t len, float *output, uint32_t ou
         features[i] = (features[i] - NORM_MEAN[i]) * NORM_SCALE[i];
     }
 
-    if (anomaly_model_regress(features, FEATURE_LEN, S, MAX_PREDICT_CLASS) != EmlOk)
+    if (motion_direct_model_regress(features, FEATURE_LEN, S, MAX_PREDICT_CLASS) != EmlOk)
     {
         return -1;
     }
@@ -296,11 +296,11 @@ int AnomalyInfer::inference(void *data, uint32_t len, float *output, uint32_t ou
     return predicted;
 }
 
-int AnomalyInfer::getMaxPredictClass() {
+int MotionDirectInfer::getMaxPredictClass() {
     return MAX_PREDICT_CLASS;
 }
 
-int AnomalyInfer::setConfidence(AnomalyConfidence_t conf) {
+int MotionDirectInfer::setConfidence(MotionDirectConfidence_t conf) {
     confidence = conf;
     return 0;
 }
