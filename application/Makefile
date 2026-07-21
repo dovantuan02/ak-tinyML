@@ -14,7 +14,7 @@ SOC_NAME = STM32L151CBT6
 SOC_FLASH_BYTES = 131072 # 128KB
 SOC_SRAM_BYTES = 16384	 # 16KB
 FLASH_BASE_ADDR_VAL = 0x08000000
-MODEL_FILE=mnist_model.h
+MODEL_SYMBOL_PREFIX ?= motion_direct_model
 
 # Name of build target ex: ak-base-kit-tinyml-app.bin
 NAME_MODULE = ak-base-kit-tinyml-app
@@ -64,7 +64,7 @@ IRQ_DEBUG_OPTION = -UAK_IO_IRQ_ANALYZER
 USB_OPTION = -UUSING_USB_MOD
 
 # Interface compile option.
-IF_LINK_OPTION = -DIF_LINK_UART_EN
+IF_LINK_OPTION = -UIF_LINK_UART_EN
 IF_NETWORK_NRF24_OPTION = -UIF_NETWORK_NRF24_EN
 
 # Task compile option.
@@ -279,6 +279,8 @@ help:
 	$(Print) "[make debug] gdb debug"
 	$(Print) "[make clean] clean build project folder"
 	$(Print) "[make info] print SOC, flash and RAM usage"
+	$(Print) "[make model_info] print model FLASH/RAM size"
+	$(Print) "[make ram_usage] list top RAM consumers with progress bar"
 	$(Print) "[make asm] generate asm file"
 	$(Print) "[make sym] list symbol from objects file"
 
@@ -317,15 +319,58 @@ clean:
 	@rm -rf $(OBJECTS_DIR)
 
 .PHONY: model_info
-model_info:
+model_info: $(TARGET)
+	@echo ""
+	@echo "=== Model Size Info (Prefix: $(MODEL_SYMBOL_PREFIX)) ==="
+	@bash -c ' \
+	MODEL_FLASH=0; MODEL_RAM=0; \
+	while IFS=" " read -r addr size type name; do \
+		case "$$type" in \
+			[RrTt]) MODEL_FLASH=$$(( MODEL_FLASH + 0x$$size )) ;; \
+			[DdBb]) MODEL_RAM=$$(( MODEL_RAM + 0x$$size )) ;; \
+		esac; \
+	done < <("$(OBJNM)" -S --print-size "$(TARGET)" 2>/dev/null | grep "$(MODEL_SYMBOL_PREFIX)"); \
+	printf " - Model FLASH (const weights/biases/structs): %d bytes\n" $$MODEL_FLASH; \
+	printf " - Model RAM   (mutable buffers/structs):      %d bytes\n" $$MODEL_RAM; \
+	printf " - Model Total:                                %d bytes\n" $$(( MODEL_FLASH + MODEL_RAM ))'
 
+.PHONY: ram_usage
+ram_usage: $(TARGET)
+	@echo ""
+	@echo "=== Top RAM Consumers (sorted by size) ==="
+	@bash -c ' \
+	TOTAL_RAM=$(SOC_SRAM_BYTES); \
+	BAR_WIDTH=30; \
+	$(OBJNM) -S --print-size $(TARGET) 2>/dev/null | \
+	awk "/[DdBb]/ { print \$$2, \$$3, \$$4 }" | \
+	sort -rn -k1 | head -30 | \
+	while IFS=" " read -r size type name; do \
+		dec_size=$$(( 0x$$size )); \
+		pct=$$(awk "BEGIN {printf \"%.1f\", ($$dec_size * 100.0) / $$TOTAL_RAM}"); \
+		bar_len=$$(awk "BEGIN {printf \"%d\", ($$dec_size * $$BAR_WIDTH) / $$TOTAL_RAM}"); \
+		[ $$bar_len -lt 1 ] && bar_len=1; \
+		bar=$$(printf "%*s" $$bar_len | tr " " "#"); \
+		if [ "$$type" = "D" ] || [ "$$type" = "d" ]; then section=".data"; \
+		elif [ "$$type" = "B" ] || [ "$$type" = "b" ]; then section=".bss "; \
+		else section="????"; fi; \
+		printf " %6d bytes (%5.1f%%) [%-30s] [%s] %s\n" $$dec_size $$pct "$$bar" "$$section" "$$name"; \
+	done; \
+	echo ""; \
+	RAM_DATA=0; RAM_BSS=0; \
+	while IFS=" " read -r s t n; do \
+		dec=$$(( 0x$$s )); \
+		case "$$t" in [Dd]) RAM_DATA=$$(( RAM_DATA + dec )) ;; [Bb]) RAM_BSS=$$(( RAM_BSS + dec )) ;; esac; \
+	done < <($(OBJNM) -S --print-size $(TARGET) 2>/dev/null | awk "/[DdBb]/ { print \$$2, \$$3 }"); \
+	printf " - .data (initialized):   %5d bytes (%5.1f%%)\n" $$RAM_DATA $$(awk "BEGIN {printf \"%.1f\", ($$RAM_DATA * 100.0) / $$TOTAL_RAM}"); \
+	printf " - .bss  (uninitialized): %5d bytes (%5.1f%%)\n" $$RAM_BSS $$(awk "BEGIN {printf \"%.1f\", ($$RAM_BSS * 100.0) / $$TOTAL_RAM}"); \
+	printf " - Total RAM used:        %5d bytes (%5.1f%%) / %d bytes\n" $$(( RAM_DATA + RAM_BSS )) $$(awk "BEGIN {printf \"%.1f\", (($$RAM_DATA + $$RAM_BSS) * 100.0) / $$TOTAL_RAM}") $$TOTAL_RAM'
 
 .PHONY: info
 info: $(TARGET)
 	@echo "Memory usage info for $(TARGET):"
 	@$(MEMORY_INFO_COLLECT); \
-	$(MEMORY_INFO_PRINT) \
-	model_info
+	$(MEMORY_INFO_PRINT); \
+	$(MAKE) --no-print-directory model_info
 
 asm: $(TARGET)
 	$(Print) disassemble-all $(<:.axf=.asm)

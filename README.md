@@ -8,7 +8,7 @@
 
 [<img src="hardware/images/ak-foundation-logo.png" width="240"/>](https://github.com/the-ak-foundation)
 
-TinyML-based anomaly detection system running on the AK Embedded Base Kit (STM32L151 + ICM-20948 IMU).
+TinyML-based motion classify system running on the AK Embedded Base Kit.
 
 3-axis accelerometer data is collected at 58 Hz, processed through a DSP pipeline (**Butterworth lowpass, FFT, PSD**), and classified by a small fully-connected neural network to detect **4 motion states**: idle, left-right, up-down, and vigorous shaking (maritine).
 

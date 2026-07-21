@@ -9,10 +9,12 @@
 #include "arm_math.h"
 #include "arm_const_structs.h"
 
+#include "view_render.h"
+
 #include "motion_direct_classify.h"
 #include "model/motion_direct_classify_model.h"
 
-#define DBG
+// #define DBG
 #define PI                      (3.14159265358979f)
 #define AXES                    (3)
 #define SCALE_AXES              (0.00010017430721f)
@@ -43,22 +45,8 @@ static const char *feat_name[NUM_FEATURES_PER_AXIS] = {
 static const char *axis_name[AXES] = {"X", "Y", "Z"};
 #endif
 
-enum Class 
-{
-    Down,
-    Idle,
-    Left,
-    Right,
-    Unknown,
-    Up,
-    End
-};
-
-static const char *label[Class::End] = {"Down", "Idle", "Left", "Right", "Unknown", "Up"};
-
 /*
  * Single scratch buffer (512B) shared across the entire DSP pipeline.
- * Lifetime phases per extract_feature call:
  *   1. S[0->56]  = deinterleaved axis signal (written by caller)
  *   2. S[0->56]  = filtered signal (biquad in-place)
  *   3. S[0->127] = FFT complex buffer (window+interleave in reverse order)
@@ -183,6 +171,54 @@ static void extract_axis_features(uint32_t n, float state[3][2], float *out)
     }
 }
 
+void MotionDirectInfer::drawArrow(MotionClass direction)
+{
+    view_render.clear();
+
+    int cx = 64;
+    int cy = 32;
+    int arrow_len = 20;
+    int head_size = 10;
+
+    switch (direction)
+    {
+    case MotionClass::Down:
+        view_render.fillTriangle(cx, cy + arrow_len, cx - head_size, cy - head_size / 2, cx + head_size, cy - head_size / 2, WHITE);
+        view_render.fillRect(cx - 3, cy - head_size / 2, 6, arrow_len, WHITE);
+        break;
+    case MotionClass::Idle:
+        view_render.fillCircle(cx, cy, 8, WHITE);
+        view_render.fillCircle(cx, cy, 4, BLACK);
+        break;
+    case MotionClass::Left:
+        view_render.fillTriangle(cx - arrow_len, cy, cx + head_size / 2, cy - head_size, cx + head_size / 2, cy + head_size, WHITE);
+        view_render.fillRect(cx + head_size / 2, cy - 3, arrow_len, 6, WHITE);
+        break;
+    case MotionClass::Right:
+        view_render.fillTriangle(cx + arrow_len, cy, cx - head_size / 2, cy - head_size, cx - head_size / 2, cy + head_size, WHITE);
+        view_render.fillRect(cx - arrow_len, cy - 3, arrow_len - head_size / 2 + 1, 6, WHITE);
+        break;
+    case MotionClass::Unknown:
+        view_render.setCursor(cx - 4, cy - 4);
+        view_render.setTextSize(2);
+        view_render.setTextColor(WHITE);
+        view_render.print("?");
+        break;
+    case MotionClass::Up:
+        view_render.fillTriangle(cx, cy - arrow_len, cx - head_size, cy + head_size / 2, cx + head_size, cy + head_size / 2, WHITE);
+        view_render.fillRect(cx - 3, cy - head_size / 2, 6, arrow_len, WHITE);
+        break;
+    default:
+        break;
+    }
+
+    view_render.setTextSize(1);
+    view_render.setTextColor(WHITE);
+    view_render.setCursor(0, 56);
+    view_render.print(label[direction]);
+    view_render.update();
+}
+
 MotionDirectInfer::MotionDirectInfer()
 {
     for (int i = 0; i < FEATURE_LEN; i++)
@@ -206,16 +242,12 @@ int MotionDirectInfer::extract_feature(void *data, uint32_t len)
     }
 
     float *raw = (float *)(data);
-
     for (int a = 0; a < AXES; a++)
     {
-        /* Deinterleave axis a directly into S[0..56] — no axis_buf needed */
         for (uint32_t i = 0; i < len; i++)
         {
             S[i] = raw[i * AXES + a] * SCALE_AXES;
         }
-
-        /* Extract features, write directly to features[] — no feat_per_axis needed */
         extract_axis_features(len, filter_state[a], &features[a * NUM_FEATURES_PER_AXIS]);
     }
 
@@ -236,8 +268,8 @@ int MotionDirectInfer::inference(void *data, uint32_t len, float *output, uint32
         return -1;
     }
 
-    APP_DBG("- MotionDirect Features:\n");
 #ifdef DBG
+    APP_DBG("- MotionDirect Features:\n");
     for (int axis = 0; axis < AXES; axis++)
     {
         xfprintf((void (*)(int))sys_ctrl_shell_put_char, "[%s] ", axis_name[axis]);
@@ -271,18 +303,17 @@ int MotionDirectInfer::inference(void *data, uint32_t len, float *output, uint32
 
     for (int i = 0; i < MAX_PREDICT_CLASS; i++)
     {
-        if (S[i] >= confidence.confidence[i] &&
-            S[i] > max_prob)
+        if (S[i] >= confidence.confidence[i] && S[i] > max_prob)
         {
             max_prob = S[i];
             predicted = i;
         }
     }
-    if (predicted == Class::Right && S[Class::Left] >= confidence.left) {
-        predicted = Class::Left;
+    if (predicted == MotionClass::Right && S[MotionClass::Left] >= confidence.left) {
+        predicted = MotionClass::Left;
     }
-    if (predicted == Class::Down && S[Class::Up] >= confidence.up) {
-        predicted = Class::Up;
+    if (predicted == MotionClass::Down && S[MotionClass::Up] >= confidence.up) {
+        predicted = MotionClass::Up;
     }
 
     APP_DBG("Pointer [%08X]\n", (unsigned int)this);
@@ -293,7 +324,7 @@ int MotionDirectInfer::inference(void *data, uint32_t len, float *output, uint32
     APP_DBG("\tP(up)= %.3f\n", S[5]);
     APP_DBG("\tP(down)= %.3f\n", S[0]);
     APP_DBG("----> Predict= %s\n\n", predicted == -1 ? "None" : label[predicted]);
-    return predicted;
+    return predicted == -1 ? MotionClass::Unknown : predicted;
 }
 
 int MotionDirectInfer::getMaxPredictClass() {

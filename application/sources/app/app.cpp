@@ -75,7 +75,6 @@
 #endif
 
 #include "buzzer.h"
-#include "mic.h"
 
 #include "Wire.h"
 
@@ -273,7 +272,7 @@ int main_app() {
 		MotionDirectConfidence_t conf = {0.0f};
 		conf.down = 0.45f;
 		conf.idle = 0.6f;
-		conf.left = 0.15f;
+		conf.left = 0.09f;
 		conf.right = 0.4f;
 		conf.unknown = 0.35f;
 		conf.up = 0.07f;
@@ -375,17 +374,20 @@ void task_polling_ml() {
 	}
 
 	static struct icm_data_internal_t last_samples[ACCEL_SAMPLE_DURATION_SECONDS * ACCEL_SAMPLE_RATE_HZ];
+	static float buffer[ACCEL_AXES_NUM * ACCEL_SAMPLE_DURATION_SECONDS * ACCEL_SAMPLE_RATE_HZ];
+
 	if (ring_buffer_get_last_n(&accel_sensor.sample_buff, last_samples, ACCEL_SAMPLE_DURATION_SECONDS * ACCEL_SAMPLE_RATE_HZ) != RET_RING_BUFFER_OK) {
 		return;
 	}
-	static float buffer[ACCEL_AXES_NUM * ACCEL_SAMPLE_DURATION_SECONDS * ACCEL_SAMPLE_RATE_HZ];
 	int i = 0;
 	for (int s = 0; s < (ACCEL_SAMPLE_DURATION_SECONDS * ACCEL_SAMPLE_RATE_HZ); s++) {
 		buffer[i++] = last_samples[s].acc_x;
 		buffer[i++] = last_samples[s].acc_y;
 		buffer[i++] = last_samples[s].acc_z;
 	}
+
 	int predicted = infer.inference(buffer, (ACCEL_SAMPLE_DURATION_SECONDS * ACCEL_SAMPLE_RATE_HZ));
+	MotionDirectInfer::drawArrow((MotionClass)(predicted));
 	last_inference_ms = now_ms;
 }
 

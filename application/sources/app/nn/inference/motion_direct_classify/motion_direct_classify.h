@@ -37,6 +37,20 @@ typedef struct
     };
 } MotionDirectConfidence_t;
 
+
+enum MotionClass 
+{
+    Down,
+    Idle,
+    Left,
+    Right,
+    Unknown,
+    Up,
+    End
+};
+
+static const char *label[MotionClass::End] = {"Down", "Idle", "Left", "Right", "Unknown", "Up"};
+
 class MotionDirectInfer
 {
 private:
@@ -51,6 +65,7 @@ public:
     int inference(void *data, uint32_t len, float *output, uint32_t output_len);
     int setConfidence(MotionDirectConfidence_t conf);
     static int getMaxPredictClass();
+    static void drawArrow(MotionClass direction);
 };
 
 #endif

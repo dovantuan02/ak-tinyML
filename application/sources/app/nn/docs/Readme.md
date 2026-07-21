@@ -211,7 +211,7 @@ sequenceDiagram
 | File | Role | 
 |------|------| 
 | [Training Motion Direct Classify](../trainning/Motion-Direct-Classify.ipynb)   | Training pipeline |
-| [Motion Direct Inference](../inference/motion_direct_classify)                        | MotionDirectInfer class header |
+| [Motion Direct Inference](../inference/motion_direct_classify)                        | Class header |
 | [Model](../inference/motion_direct_classify/model/motion_direct_classify_model.h)       | Model weights (emlearn) |
 | [Sensor](../../task_accel_sensor.cpp)                                 | ICM-20948 driver + ring buffer |
 
