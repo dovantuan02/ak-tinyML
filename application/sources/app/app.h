@@ -183,8 +183,8 @@ enum {
 /*****************************************************************************/
 enum {
 	AC_ACCEL_INIT = AK_USER_DEFINE_SIG,
-	AC_ACCEL_SET_CONFIG,
-	AC_ACCEL_GET_CONFIG
+	AC_ACCEL_CONFIG_DMP,
+	AC_ACCEL_INFERENCE,
 };
 
 /*****************************************************************************/

@@ -78,7 +78,7 @@
 
 #include "Wire.h"
 
-static NNInfer infer(MotionDirectClassify);
+
 /* ----------------------- Json includes ------------------------------------*/
 //#include "json.hpp"
 
@@ -100,6 +100,7 @@ const app_info_t app_info { \
 
 
 static boot_app_share_data_t boot_app_share_data;
+NNInfer infer(MotionDirectClassify);
 
 static void app_power_on_reset();
 static void app_start_timer();
@@ -270,9 +271,9 @@ int main_app() {
 #endif
 	{
 		MotionDirectConfidence_t conf = {0.0f};
-		conf.down = 0.45f;
+		conf.down = 0.3f;
 		conf.idle = 0.6f;
-		conf.left = 0.09f;
+		conf.left = 0.06f;
 		conf.right = 0.4f;
 		conf.unknown = 0.35f;
 		conf.up = 0.07f;
@@ -355,53 +356,6 @@ void task_polling_console() {
 	}
 }
 #endif
-
-void task_polling_ml() {
-	static uint32_t last_inference_ms = 0;
-	uint32_t now_ms = sys_ctrl_millis();
-
-	if ((now_ms - last_inference_ms) < (uint32_t)(ACCEL_WINDOW_STRIDE_SECONDS * 1000)) {
-		return;
-	}
-
-	struct icm_data_internal_t {
-		float acc_x;
-		float acc_y;
-		float acc_z;
-	};
-	if (ring_buffer_availble(&accel_sensor.sample_buff) < (ACCEL_SAMPLE_DURATION_SECONDS * ACCEL_SAMPLE_RATE_HZ)) {
-		return;
-	}
-
-	static float buffer[ACCEL_AXES_NUM * ACCEL_SAMPLE_DURATION_SECONDS * ACCEL_SAMPLE_RATE_HZ];
-#if 0
-	static struct icm_data_internal_t last_samples[ACCEL_SAMPLE_DURATION_SECONDS * ACCEL_SAMPLE_RATE_HZ];
-	if (ring_buffer_get_last_n(&accel_sensor.sample_buff, last_samples, ACCEL_SAMPLE_DURATION_SECONDS * ACCEL_SAMPLE_RATE_HZ) != RET_RING_BUFFER_OK) {
-		return;
-	}
-	int i = 0;
-	for (int s = 0; s < (ACCEL_SAMPLE_DURATION_SECONDS * ACCEL_SAMPLE_RATE_HZ); s++) {
-		buffer[i++] = last_samples[s].acc_x;
-		buffer[i++] = last_samples[s].acc_y;
-		buffer[i++] = last_samples[s].acc_z;
-	}
-#else
-	icm_data_internal_t icm_data;
-	const int max_samples = ACCEL_AXES_NUM * ACCEL_SAMPLE_DURATION_SECONDS * ACCEL_SAMPLE_RATE_HZ;
-	int i = 0;
-	while (i < max_samples && !ring_buffer_is_empty(&accel_sensor.sample_buff)) {
-		ring_buffer_get(&accel_sensor.sample_buff, &icm_data);
-		buffer[i++] = icm_data.acc_x;
-		buffer[i++] = icm_data.acc_y;
-		buffer[i++] = icm_data.acc_z;
-	}
-#endif
-	int predicted = infer.inference(buffer, (ACCEL_SAMPLE_DURATION_SECONDS * ACCEL_SAMPLE_RATE_HZ));
-	MotionDirectInfer::drawArrow((MotionClass)(predicted));
-	last_inference_ms = now_ms;
-	task_polling_set_ability(AC_TASK_POLLING_ML_ID, AK_DISABLE);
-	accel_sensor.bRunInfer = 0;
-}
 
 /*****************************************************************************/
 /* app initial function.

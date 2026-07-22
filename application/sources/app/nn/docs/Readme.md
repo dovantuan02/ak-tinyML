@@ -119,61 +119,77 @@ Output: 6 class probabilities       Total: ~2336 floats
 
 ## 6. Processing Flow
 
-### Sliding Window Buffer
+### Trigger-Based Event Detection
 
-The system uses a sliding window approach with 50% overlap:
+The system uses a **delta magnitude trigger** to detect motion in any direction, followed by a fixed-size window for inference.
+
+#### Phase 1: Motion trigger (delta magnitude)
+
+The system monitors the **change** in acceleration magnitude between consecutive EKF-filtered samples:
 
 ```
-Time(s):  0    0.5    1    1.5    2
-          |-----|-----|-----|-----|
-Window 1: [0 ---------> 1s]
-Window 2:      [0.5 ---------> 1.5s]
-Window 3:           [1 ---------> 2s]
+delta_mag = |mag_g(n) - mag_g(n-1)|
+if delta_mag > 0.002g → trigger fires
 ```
 
-- **Window size**: 1 second (57 samples @ 57 Hz)
-- **Stride**: 0.5 second (50% overlap)
-- **Buffer**: Circular buffer stores 2 seconds of data
+The first sample after boot is used to initialize the baseline (`prev_mag_g`) — no trigger check is performed on that sample.
+
+This detects motion in **all directions** (up, down, left, right) because any movement changes the magnitude relative to the previous sample. Unlike absolute thresholding (which is biased toward vertical motion due to gravity), delta magnitude is direction-agnostic.
+
+#### Phase 2: Data collection
+
+Once triggered, the ring buffer fills with 57 samples (1 second of data). During this time, no new triggers are accepted (`bRunInfer` guard).
+
+#### Phase 3: Inference
+
+When the buffer is full, the ML polling task drains the buffer and runs classification:
+
+```
+Buffer (57 samples × 3 axes) → DSP Feature Extraction → Neural Network → Predicted Class
+```
+
+After inference completes, the system resets and waits for the next trigger.
 
 ```mermaid
 sequenceDiagram
     participant Sensor
-    participant RB as Ring Buffer (2s)
+    participant EKF as EKF Filter
+    participant Trig as Delta Trigger
+    participant RB as Ring Buffer (57 samples)
     participant Task as Polling ML
     participant Infer as MotionDirectInfer::inference()
     participant DSP as Feature Extraction
-    participant Norm as Feature Normalization
     participant NN as Neural Network
-    participant CLS as Classification
 
-    Sensor->>RB: Stream accelerometer data and filter noise
+    Note over Sensor: Boot: first sample initializes prev_mag_g
+    Sensor->>EKF: Raw accel (X, Y, Z)
+    EKF-->>Trig: Filtered magnitude (mag_g)
+    Trig->>Trig: prev_mag_g = mag_g (no trigger check)
 
-    Note over RB: Window 1: [0→1s]
-    RB->>Task: Window ready (57 samples)
-    Task->>Infer: inference(window_1)
-    Infer->>DSP: Extract features
-    DSP->>Norm: Normalize (feature - mean) × scale
-    Norm->>NN: 102 features
-    NN->>CLS: 6 class probabilities
-    CLS-->>Task: Predicted class
+    Note over Sensor: Monitoring
+    loop Every 10ms poll
+        Sensor->>EKF: Raw accel
+        EKF-->>Trig: Filtered magnitude (mag_g)
+        Trig->>Trig: delta = |mag_g - prev_mag_g|
 
-    Note over RB: Window 2: [0.5→1.5s]
-    RB->>Task: Window ready (57 samples)
-    Task->>Infer: inference(window_2)
-    Infer->>DSP: Extract features
-    DSP->>Norm: Normalize
-    Norm->>NN: 102 features
-    NN->>CLS: 6 class probabilities
-    CLS-->>Task: Predicted class
+        alt delta > 0.002g (motion detected)
+            Note over Trig: Phase 2: Collect data
+            loop 57 samples (1s)
+                Sensor->>EKF: Raw accel
+                EKF-->>RB: Filtered (filt_x, filt_y, filt_z)
+            end
 
-    Note over RB: Window 3: [1→2s]
-    RB->>Task: Window ready (57 samples)
-    Task->>Infer: inference(window_3)
-    Infer->>DSP: Extract features
-    DSP->>Norm: Normalize
-    Norm->>NN: 102 features
-    NN->>CLS: 6 class probabilities
-    CLS-->>Task: Predicted class
+            Note over RB: Phase 3: Inference
+            RB->>Task: Buffer full (57 samples)
+            Task->>Infer: inference(buffer)
+            Infer->>DSP: Extract 102 features
+            DSP->>NN: FCNN classification
+            NN-->>Task: Predicted class (idle/left/right/up/down/unknown)
+            Task->>Task: Reset, wait for next trigger
+        else delta <= 0.002g (no motion)
+            Trig->>Trig: Continue monitoring
+        end
+    end
 ```
 ## 7. Loss, Accuracy, Confusion Matrix
 

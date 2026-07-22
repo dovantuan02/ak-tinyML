@@ -13,9 +13,9 @@
 #define ACCEL_DELTA_THRESHOLD           (0.002f)
 
 typedef struct {
-    uint8_t bCalib : 1;
     uint8_t bRunInfer : 1;
     uint8_t bTrigger : 1;
+    uint8_t bFirstSample : 1;
     uint8_t reserve : 5;
 
     uint8_t ability;

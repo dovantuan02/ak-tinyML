@@ -55,6 +55,5 @@ task_polling_t app_task_polling_table[] = {
 	#if defined TASK_SHELL_EN
 	{AC_TASK_POLLING_CONSOLE_ID	,	AK_ENABLE	,	task_polling_console		},
 	#endif
-	{AC_TASK_POLLING_ML_ID		, 	AK_ENABLE	, 	task_polling_ml				},
 	{AK_TASK_POLLING_EOT_ID		,	AK_DISABLE	,	(pf_task_polling)0			},
 };

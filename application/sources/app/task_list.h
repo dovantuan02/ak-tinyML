@@ -61,8 +61,6 @@ enum {
 	/* APP TASKS */
 	AC_TASK_POLLING_ZIGBEE_ID,
 	AC_TASK_POLLING_CONSOLE_ID,
-	AC_TASK_POLLING_ML_ID,
-	AC_TASK_POLLING_MIC_WAVE_ID,
 	/* EOT polling task ID */
 	AK_TASK_POLLING_EOT_ID,
 };
@@ -106,13 +104,6 @@ extern void task_rf24_demo(ak_msg_t*);
 extern void task_polling_zigbee();
 #if defined TASK_SHELL_EN
 extern void task_polling_console();
-#endif
-#ifdef __cplusplus
-extern "C" {
-#endif
-extern void task_polling_ml();
-#ifdef __cplusplus
-}
 #endif
 
 #endif //__TASK_LIST_H__

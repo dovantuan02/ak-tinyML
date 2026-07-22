@@ -1,19 +1,20 @@
+#include <math.h>
+
 #include "ak.h"
 #include "message.h"
 #include "timer.h"
 #include "task_list.h"
 #include "app.h"
 #include "app_dbg.h"
-
-#include "task_accel_sensor.h"
-#include "utils.h"
-
-#include "ICM_20948.h"
-#include "Wire.h"
 #include "sys_ctrl.h"
+
+#include "utils.h"
+#include "Wire.h"
 #include "ring_buffer.h"
 
-#include <math.h>
+#include "task_accel_sensor.h"
+#include "ICM_20948.h"
+#include "motion_direct_classify.h"
 
 #define EKF_N 3
 #define EKF_M 3
@@ -41,14 +42,12 @@ static const float R[EKF_M*EKF_M] = {
     0,     0,    0.01f
 };
 
-// Process model Jacobian: constant acceleration (identity)
 static const float F[EKF_N*EKF_N] = {
     1, 0, 0,
     0, 1, 0,
     0, 0, 1
 };
 
-// Observation Jacobian: state directly observable
 static const float H[EKF_M*EKF_N] = {
     1, 0, 0,
     0, 1, 0,
@@ -64,9 +63,9 @@ void task_accel(ak_msg_t *msg)
     case AC_ACCEL_INIT:
     {
         accel_sensor.ability = AK_DISABLE;
-        accel_sensor.bCalib = 0;
         accel_sensor.bRunInfer = 0;
         accel_sensor.bTrigger = 0;
+        accel_sensor.bFirstSample = 1;
         accel_sensor.prev_mag_g = 0.0f;
 
         Wire.begin();
@@ -79,7 +78,7 @@ void task_accel(ak_msg_t *msg)
             timer_set(AC_TASK_ACCEL_ID, AC_ACCEL_INIT, 200, TIMER_ONE_SHOT);
             break;
         }
-        task_post_pure_msg(AC_TASK_ACCEL_ID, AC_ACCEL_SET_CONFIG);
+        task_post_pure_msg(AC_TASK_ACCEL_ID, AC_ACCEL_CONFIG_DMP);
         APP_DBG("Init ring buffer: %d bytes\n", sizeof(buffer));
         ring_buffer_init(&accel_sensor.sample_buff, buffer, sizeof(buffer), ACCEL_DATA_SIZE);
 
@@ -89,10 +88,10 @@ void task_accel(ak_msg_t *msg)
     }
     break;
 
-    case AC_ACCEL_SET_CONFIG:
+    case AC_ACCEL_CONFIG_DMP:
     {
         bool success = true;
-        APP_DBG_SIG("AC_ACCEL_SET_CONFIG\n");
+        APP_DBG_SIG("AC_ACCEL_CONFIG_DMP\n");
         accel_sensor.ability = AK_DISABLE;
         if (accel_sensor.icm20948.initializeDMP() != ICM_20948_Stat_Ok) {
             APP_DBG("Init DMP failed, status: %s!\n", accel_sensor.icm20948.statusString());
@@ -135,13 +134,41 @@ void task_accel(ak_msg_t *msg)
         break;
 
         retry:
-            timer_set(AC_TASK_ACCEL_ID, AC_ACCEL_SET_CONFIG, 200, TIMER_ONE_SHOT);
+            timer_set(AC_TASK_ACCEL_ID, AC_ACCEL_CONFIG_DMP, 200, TIMER_ONE_SHOT);
     }
     break;
 
-    case AC_ACCEL_GET_CONFIG:
+    case AC_ACCEL_INFERENCE: 
     {
-        APP_DBG_SIG("AC_ACCEL_GET_CONFIG\n");
+        APP_DBG_SIG("AC_ACCEL_INFERENCE\n");
+        extern NNInfer infer;
+        static uint32_t last_inference_ms = 0;
+        uint32_t now_ms = sys_ctrl_millis();
+
+        struct icm_data_internal_t {
+            float acc_x;
+            float acc_y;
+            float acc_z;
+        };
+        if (ring_buffer_availble(&accel_sensor.sample_buff) < (ACCEL_SAMPLE_DURATION_SECONDS * ACCEL_SAMPLE_RATE_HZ)) {
+            return;
+        }
+
+        static float buffer[ACCEL_AXES_NUM * ACCEL_SAMPLE_DURATION_SECONDS * ACCEL_SAMPLE_RATE_HZ];
+        icm_data_internal_t icm_data;
+        const int max_samples = ACCEL_AXES_NUM * ACCEL_SAMPLE_DURATION_SECONDS * ACCEL_SAMPLE_RATE_HZ;
+        int i = 0;
+        while (i < max_samples && !ring_buffer_is_empty(&accel_sensor.sample_buff)) {
+            ring_buffer_get(&accel_sensor.sample_buff, &icm_data);
+            buffer[i++] = icm_data.acc_x;
+            buffer[i++] = icm_data.acc_y;
+            buffer[i++] = icm_data.acc_z;
+        }
+
+        int predicted = infer.inference(buffer, (ACCEL_SAMPLE_DURATION_SECONDS * ACCEL_SAMPLE_RATE_HZ));
+        MotionDirectInfer::drawArrow((MotionClass)(predicted));
+        last_inference_ms = now_ms;
+        accel_sensor.bRunInfer = 0;
     }
     break;
 
@@ -184,15 +211,21 @@ void accel_timer_polling(Accel_t *accel)
                 float filt_y = _ekf.x[1];
                 float filt_z = _ekf.x[2];
 
-                float mag_lsb = sqrt(filt_x * filt_x + filt_y * filt_y + filt_z * filt_z);
-                float mag_g = mag_lsb / ACCEL_LSB_PER_G;
-#if 0
+#if 0           // NOTE: to get data for trainning, or test
                 xfprintf((void (*)(int))sys_ctrl_shell_put_char, "%.1f,%.1f,%.1f\n", filt_x, filt_y, filt_z);
 #else
-                float delta_mag = fabs(mag_g - accel->prev_mag_g);
-                accel->prev_mag_g = mag_g;
-                if (delta_mag > ACCEL_DELTA_THRESHOLD) {
-                    accel->bTrigger = 1;
+                float mag_lsb = sqrt(filt_x * filt_x + filt_y * filt_y + filt_z * filt_z);
+                float mag_g = mag_lsb / ACCEL_LSB_PER_G;
+
+                if (accel->bFirstSample) {
+                    accel->prev_mag_g = mag_g;
+                    accel->bFirstSample = 0;
+                } else {
+                    float delta_mag = fabs(mag_g - accel->prev_mag_g);
+                    accel->prev_mag_g = mag_g;
+                    if (delta_mag > ACCEL_DELTA_THRESHOLD) {
+                        accel->bTrigger = 1;
+                    }
                 }
 
                 if (accel->bRunInfer == 0 && accel->bTrigger == 1) {
@@ -204,7 +237,7 @@ void accel_timer_polling(Accel_t *accel)
                     ring_buffer_put(&accel->sample_buff, &icm_data);
                     if (ring_buffer_is_full(&accel->sample_buff)) {
                         // start inference
-                        task_polling_set_ability(AC_TASK_POLLING_ML_ID, AK_ENABLE);
+                        task_post_pure_msg(AC_TASK_ACCEL_ID, AC_ACCEL_INFERENCE);
                         accel->bRunInfer = 1;
                         accel->bTrigger = 0;
                     }
@@ -216,7 +249,7 @@ void accel_timer_polling(Accel_t *accel)
         {
             if (accel->icm20948.status == ICM_20948_Stat_FIFOIncompleteData)
             {
-                task_post_pure_msg(AC_TASK_ACCEL_ID, AC_ACCEL_SET_CONFIG);
+                task_post_pure_msg(AC_TASK_ACCEL_ID, AC_ACCEL_CONFIG_DMP);
             }
         }
     }
