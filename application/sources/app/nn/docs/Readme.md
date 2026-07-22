@@ -119,8 +119,6 @@ Output: 6 class probabilities       Total: ~2336 floats
 
 ## 6. Processing Flow
 
-### Trigger-Based Event Detection
-
 The system uses a **delta magnitude trigger** to detect motion in any direction, followed by a fixed-size window for inference.
 
 #### Phase 1: Motion trigger (delta magnitude)
@@ -129,23 +127,21 @@ The system monitors the **change** in acceleration magnitude between consecutive
 
 ```
 delta_mag = |mag_g(n) - mag_g(n-1)|
-if delta_mag > 0.002g → trigger fires
+if delta_mag > 0.002g → trigger store data -> inference
 ```
 
-The first sample after boot is used to initialize the baseline (`prev_mag_g`) — no trigger check is performed on that sample.
-
-This detects motion in **all directions** (up, down, left, right) because any movement changes the magnitude relative to the previous sample. Unlike absolute thresholding (which is biased toward vertical motion due to gravity), delta magnitude is direction-agnostic.
+This detects motion in **all directions** (up, down, left, right) because any movement changes the magnitude relative to the previous sample. 
 
 #### Phase 2: Data collection
 
-Once triggered, the ring buffer fills with 57 samples (1 second of data). During this time, no new triggers are accepted (`bRunInfer` guard).
+Once triggered, the ring buffer fills with 57 samples (1 second of data).
 
 #### Phase 3: Inference
 
-When the buffer is full, the ML polling task drains the buffer and runs classification:
+When the buffer stores 1s, the ML runs classification:
 
 ```
-Buffer (57 samples × 3 axes) → DSP Feature Extraction → Neural Network → Predicted Class
+Buffer (1 second x 57 samples × 3 axes) → DSP Feature Extraction → Neural Network → Predicted Class
 ```
 
 After inference completes, the system resets and waits for the next trigger.
@@ -161,7 +157,6 @@ sequenceDiagram
     participant DSP as Feature Extraction
     participant NN as Neural Network
 
-    Note over Sensor: Boot: first sample initializes prev_mag_g
     Sensor->>EKF: Raw accel (X, Y, Z)
     EKF-->>Trig: Filtered magnitude (mag_g)
     Trig->>Trig: prev_mag_g = mag_g (no trigger check)
