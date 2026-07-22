@@ -11,6 +11,9 @@
 #include "ICM_20948.h"
 #include "Wire.h"
 #include "sys_ctrl.h"
+#include "ring_buffer.h"
+
+#include <math.h>
 
 #define EKF_N 3
 #define EKF_M 3
@@ -61,6 +64,10 @@ void task_accel(ak_msg_t *msg)
     case AC_ACCEL_INIT:
     {
         accel_sensor.ability = AK_DISABLE;
+        accel_sensor.bCalib = 0;
+        accel_sensor.bRunInfer = 0;
+        accel_sensor.bTrigger = 0;
+        accel_sensor.prev_mag_g = 0.0f;
 
         Wire.begin();
         Wire.setClock(50000);
@@ -143,21 +150,22 @@ void task_accel(ak_msg_t *msg)
     }
 }
 
-void accel_timer_polling(Accel_t accel)
+void accel_timer_polling(Accel_t *accel)
 {
-    struct icm_data_internal_t {
+    struct icm_data_internal_t
+    {
         float acc_x;
         float acc_y;
         float acc_z;
     };
-    if (accel.ability == AK_ENABLE)
+    if (accel->ability == AK_ENABLE)
     {
         icm_20948_DMP_data_t data;
-        accel_sensor.icm20948.readDMPdataFromFIFO(&data);
+        accel->icm20948.readDMPdataFromFIFO(&data);
 
         float x, y, z;
         x = y = z = 0.0f;
-        if ((accel_sensor.icm20948.status == ICM_20948_Stat_Ok) || (accel_sensor.icm20948.status == ICM_20948_Stat_FIFOMoreDataAvail))
+        if ((accel->icm20948.status == ICM_20948_Stat_Ok) || (accel->icm20948.status == ICM_20948_Stat_FIFOMoreDataAvail))
         {
             if ((data.header & DMP_header_bitmap_Accel) > 0)
             {
@@ -165,37 +173,48 @@ void accel_timer_polling(Accel_t accel)
                 y = (float)data.Raw_Accel.Data.Y;
                 z = (float)data.Raw_Accel.Data.Z;
 
-                // EKF predict: constant acceleration model
-                float fx[EKF_N] = { _ekf.x[0], _ekf.x[1], _ekf.x[2] };
+                float fx[EKF_N] = {_ekf.x[0], _ekf.x[1], _ekf.x[2]};
                 ekf_predict(&_ekf, fx, F, Q);
 
-                // EKF update: fuse raw measurement
-                float z_obs[EKF_M] = { x, y, z };
-                float hx[EKF_M] = { _ekf.x[0], _ekf.x[1], _ekf.x[2] };
+                float z_obs[EKF_M] = {x, y, z};
+                float hx[EKF_M] = {_ekf.x[0], _ekf.x[1], _ekf.x[2]};
                 ekf_update(&_ekf, z_obs, hx, H, R);
 
                 float filt_x = _ekf.x[0];
                 float filt_y = _ekf.x[1];
                 float filt_z = _ekf.x[2];
 
-                #if 0
+                float mag_lsb = sqrt(filt_x * filt_x + filt_y * filt_y + filt_z * filt_z);
+                float mag_g = mag_lsb / ACCEL_LSB_PER_G;
+#if 0
                 xfprintf((void (*)(int))sys_ctrl_shell_put_char, "%.1f,%.1f,%.1f\n", filt_x, filt_y, filt_z);
-                #else
-                struct icm_data_internal_t icm_data = {
-                    .acc_x = filt_x,
-                    .acc_y = filt_y,
-                    .acc_z = filt_z
-                };
-                ring_buffer_put(&accel_sensor.sample_buff, &icm_data);
-                #endif
-            }
+#else
+                float delta_mag = fabs(mag_g - accel->prev_mag_g);
+                accel->prev_mag_g = mag_g;
+                if (delta_mag > ACCEL_DELTA_THRESHOLD) {
+                    accel->bTrigger = 1;
+                }
 
-            
+                if (accel->bRunInfer == 0 && accel->bTrigger == 1) {
+                    struct icm_data_internal_t icm_data = {
+                        .acc_x = filt_x,
+                        .acc_y = filt_y,
+                        .acc_z = filt_z
+                    };
+                    ring_buffer_put(&accel->sample_buff, &icm_data);
+                    if (ring_buffer_is_full(&accel->sample_buff)) {
+                        // start inference
+                        task_polling_set_ability(AC_TASK_POLLING_ML_ID, AK_ENABLE);
+                        accel->bRunInfer = 1;
+                        accel->bTrigger = 0;
+                    }
+                }
+#endif
+            }
         }
         else
         {
-            // APP_DBG("Status: %s\n", accel_sensor.icm20948.statusString());
-            if (accel_sensor.icm20948.status == ICM_20948_Stat_FIFOIncompleteData)
+            if (accel->icm20948.status == ICM_20948_Stat_FIFOIncompleteData)
             {
                 task_post_pure_msg(AC_TASK_ACCEL_ID, AC_ACCEL_SET_CONFIG);
             }

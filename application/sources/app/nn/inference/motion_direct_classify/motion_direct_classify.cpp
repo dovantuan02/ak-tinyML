@@ -15,7 +15,6 @@
 #include "model/motion_direct_classify_model.h"
 
 // #define DBG
-#define PI                      (3.14159265358979f)
 #define AXES                    (3)
 #define SCALE_AXES              (0.00010017430721f)
 #define FILTER_CUTOFF           (26.05078125f)
@@ -44,7 +43,7 @@ static const char *feat_name[NUM_FEATURES_PER_AXIS] = {
     "LogBin26", "LogBin27", "LogBin28", "LogBin29"};
 static const char *axis_name[AXES] = {"X", "Y", "Z"};
 #endif
-
+const char *label[MotionClass::End] = {"Down", "Idle", "Left", "Right", "Unknown", "Up"};
 /*
  * Single scratch buffer (512B) shared across the entire DSP pipeline.
  *   1. S[0->56]  = deinterleaved axis signal (written by caller)
@@ -56,18 +55,18 @@ static const char *axis_name[AXES] = {"X", "Y", "Z"};
 static float S[2 * FFT_LENGTH];
 static MotionDirectConfidence_t confidence;
 
-static void welch_max_hold_inplace(uint32_t n)
+static void welch_psd_inplace(uint32_t n)
 {
     float win_sum_sq = 0.0f;
     for (int i = 0; i < FFT_LENGTH; i++)
     {
-        float w = 0.5f * (1.0f - cosf(2.0f * PI * i / FFT_LENGTH));
+        float w = 0.5f * (1.0f - cosf(2.0f * M_PI * i / (FFT_LENGTH - 1)));
         win_sum_sq += w * w;
     }
 
     for (int i = FFT_LENGTH - 1; i >= 0; i--)
     {
-        float w = 0.5f * (1.0f - cosf(2.0f * PI * i / FFT_LENGTH));
+        float w = 0.5f * (1.0f - cosf(2.0f * M_PI * i / (FFT_LENGTH - 1)));
         S[2 * i]     = (i < (int)n) ? S[i] * w : 0.0f;
         S[2 * i + 1] = 0.0f;
     }
@@ -84,17 +83,17 @@ static void welch_max_hold_inplace(uint32_t n)
 
 static void extract_axis_features(uint32_t n, float state[3][2], float *out)
 {
-    /* Butterworth lowpass filter (3 stages, order 6) — in-place on S */
+    /* Butterworth lowpass filter */
     arm_biquad_cascade_df2T_instance_f32 biquad;
     arm_biquad_cascade_df2T_init_f32(&biquad, 3, (float32_t *)BIQUAD_COEFFS_DF2T, (float32_t *)state);
     arm_biquad_cascade_df2T_f32(&biquad, S, S, n);
 
-    /* Subtract mean — in-place on S */
+    /* Subtract mean */
     float mean_val = 0.0f;
     arm_mean_f32(S, n, &mean_val);
     arm_offset_f32(S, -mean_val, S, n);
 
-    /* Time-domain stats from S[0..n-1] */
+    /* Time-domain */
     float sum_sq = 0.0f;
     float sum_cube = 0.0f;
     float sum_four = 0.0f;
@@ -114,10 +113,9 @@ static void extract_axis_features(uint32_t n, float state[3][2], float *out)
     float skewness = (std3 > 0.0f) ? (sum_cube / n) / std3 : 0.0f;
     float kurtosis = (std4 > 0.0f) ? (sum_four / n) / std4 - 3.0f : -3.0f;
 
-    /* Welch max-hold: S[0..56] → S[0..32] = PSD */
-    welch_max_hold_inplace(n);
+    welch_psd_inplace(n);
 
-    /* Spectrum skewness and kurtosis from S[0..32] */
+    /* Spectrum skewness and kurtosis */
     float psd_mean = 0.0f;
     float psd_var = 0.0f;
     float spec_skew_num = 0.0f;
@@ -144,7 +142,7 @@ static void extract_axis_features(uint32_t n, float state[3][2], float *out)
     float spec_skew = spec_skew_num / (psd_std * psd_std * psd_std + 1e-10f);
     float spec_kurt = spec_kurt_num / (psd_var * psd_var + 1e-10f) - 3.0f;
 
-    /* Log10 of bins [1..29] */
+    /* Log10 of bins */
     float cutoff_hz = FILTER_CUTOFF;
     float bin_resolution = SAMPLING_FREQ / FFT_LENGTH;
     int stop_bin = (int)(cutoff_hz / bin_resolution + 0.5f) + 1;
@@ -323,7 +321,7 @@ int MotionDirectInfer::inference(void *data, uint32_t len, float *output, uint32
     APP_DBG("\tP(right)= %.3f\n", S[3]);
     APP_DBG("\tP(up)= %.3f\n", S[5]);
     APP_DBG("\tP(down)= %.3f\n", S[0]);
-    APP_DBG("----> Predict= %s\n\n", predicted == -1 ? "None" : label[predicted]);
+    APP_DBG("----> Predict= %s, time ms: %d\n\n", predicted == -1 ? "None" : label[predicted], (sys_ctrl_millis() - prev));
     return predicted == -1 ? MotionClass::Unknown : predicted;
 }
 

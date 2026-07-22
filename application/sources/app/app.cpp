@@ -373,9 +373,9 @@ void task_polling_ml() {
 		return;
 	}
 
-	static struct icm_data_internal_t last_samples[ACCEL_SAMPLE_DURATION_SECONDS * ACCEL_SAMPLE_RATE_HZ];
 	static float buffer[ACCEL_AXES_NUM * ACCEL_SAMPLE_DURATION_SECONDS * ACCEL_SAMPLE_RATE_HZ];
-
+#if 0
+	static struct icm_data_internal_t last_samples[ACCEL_SAMPLE_DURATION_SECONDS * ACCEL_SAMPLE_RATE_HZ];
 	if (ring_buffer_get_last_n(&accel_sensor.sample_buff, last_samples, ACCEL_SAMPLE_DURATION_SECONDS * ACCEL_SAMPLE_RATE_HZ) != RET_RING_BUFFER_OK) {
 		return;
 	}
@@ -385,10 +385,22 @@ void task_polling_ml() {
 		buffer[i++] = last_samples[s].acc_y;
 		buffer[i++] = last_samples[s].acc_z;
 	}
-
+#else
+	icm_data_internal_t icm_data;
+	const int max_samples = ACCEL_AXES_NUM * ACCEL_SAMPLE_DURATION_SECONDS * ACCEL_SAMPLE_RATE_HZ;
+	int i = 0;
+	while (i < max_samples && !ring_buffer_is_empty(&accel_sensor.sample_buff)) {
+		ring_buffer_get(&accel_sensor.sample_buff, &icm_data);
+		buffer[i++] = icm_data.acc_x;
+		buffer[i++] = icm_data.acc_y;
+		buffer[i++] = icm_data.acc_z;
+	}
+#endif
 	int predicted = infer.inference(buffer, (ACCEL_SAMPLE_DURATION_SECONDS * ACCEL_SAMPLE_RATE_HZ));
 	MotionDirectInfer::drawArrow((MotionClass)(predicted));
 	last_inference_ms = now_ms;
+	task_polling_set_ability(AC_TASK_POLLING_ML_ID, AK_DISABLE);
+	accel_sensor.bRunInfer = 0;
 }
 
 /*****************************************************************************/
@@ -437,7 +449,7 @@ void sys_irq_timer_10ms() {
 	button_timer_polling(&btn_up);
 	button_timer_polling(&btn_down);
 
-	accel_timer_polling(accel_sensor);
+	accel_timer_polling(&accel_sensor);
 }
 
 /* init non-clear RAM objects

@@ -5,7 +5,7 @@
 #include "task.h"
 
 extern const task_t app_task_table[];
-extern const task_polling_t app_task_polling_table[];
+extern task_polling_t app_task_polling_table[];
 
 /*****************************************************************************/
 /*  DECLARE: Internal Task ID

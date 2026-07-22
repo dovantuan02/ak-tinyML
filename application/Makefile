@@ -49,11 +49,6 @@ OPTIMIZE_OPTION = -g -Os
 # RTOS development option.
 RTOS_DEV_OPTION = -URTOS_DEV_EN
 
-# AI option
-AI_OPTION = -DAI_EN
-
-MIC_OPTION = -DMIC_EN
-
 # Release build option, that is used in fatal function, restart system when fatal, and debug levels.
 RELEASE_OPTION = -URELEASE
 
@@ -321,7 +316,7 @@ clean:
 .PHONY: model_info
 model_info: $(TARGET)
 	@echo ""
-	@echo "=== Model Size Info (Prefix: $(MODEL_SYMBOL_PREFIX)) ==="
+	@echo "Model Size Info (Prefix: $(MODEL_SYMBOL_PREFIX))"
 	@bash -c ' \
 	MODEL_FLASH=0; MODEL_RAM=0; \
 	while IFS=" " read -r addr size type name; do \
@@ -330,9 +325,8 @@ model_info: $(TARGET)
 			[DdBb]) MODEL_RAM=$$(( MODEL_RAM + 0x$$size )) ;; \
 		esac; \
 	done < <("$(OBJNM)" -S --print-size "$(TARGET)" 2>/dev/null | grep "$(MODEL_SYMBOL_PREFIX)"); \
-	printf " - Model FLASH (const weights/biases/structs): %d bytes\n" $$MODEL_FLASH; \
-	printf " - Model RAM   (mutable buffers/structs):      %d bytes\n" $$MODEL_RAM; \
-	printf " - Model Total:                                %d bytes\n" $$(( MODEL_FLASH + MODEL_RAM ))'
+	printf " - Model FLASH : %d bytes\n" $$MODEL_FLASH; \
+	printf " - Model RAM   : %d bytes\n" $$MODEL_RAM; '
 
 .PHONY: ram_usage
 ram_usage: $(TARGET)
@@ -342,7 +336,7 @@ ram_usage: $(TARGET)
 	TOTAL_RAM=$(SOC_SRAM_BYTES); \
 	BAR_WIDTH=30; \
 	$(OBJNM) -S --print-size $(TARGET) 2>/dev/null | \
-	awk "/[DdBb]/ { print \$$2, \$$3, \$$4 }" | \
+	awk "\$$3 ~ /^[DdBb]$$/ { print \$$2, \$$3, \$$4 }" | \
 	sort -rn -k1 | head -30 | \
 	while IFS=" " read -r size type name; do \
 		dec_size=$$(( 0x$$size )); \
@@ -360,7 +354,7 @@ ram_usage: $(TARGET)
 	while IFS=" " read -r s t n; do \
 		dec=$$(( 0x$$s )); \
 		case "$$t" in [Dd]) RAM_DATA=$$(( RAM_DATA + dec )) ;; [Bb]) RAM_BSS=$$(( RAM_BSS + dec )) ;; esac; \
-	done < <($(OBJNM) -S --print-size $(TARGET) 2>/dev/null | awk "/[DdBb]/ { print \$$2, \$$3 }"); \
+	done < <($(OBJNM) -S --print-size $(TARGET) 2>/dev/null | awk "\$$3 ~ /^[DdBb]$$/ { print \$$2, \$$3 }"); \
 	printf " - .data (initialized):   %5d bytes (%5.1f%%)\n" $$RAM_DATA $$(awk "BEGIN {printf \"%.1f\", ($$RAM_DATA * 100.0) / $$TOTAL_RAM}"); \
 	printf " - .bss  (uninitialized): %5d bytes (%5.1f%%)\n" $$RAM_BSS $$(awk "BEGIN {printf \"%.1f\", ($$RAM_BSS * 100.0) / $$TOTAL_RAM}"); \
 	printf " - Total RAM used:        %5d bytes (%5.1f%%) / %d bytes\n" $$(( RAM_DATA + RAM_BSS )) $$(awk "BEGIN {printf \"%.1f\", (($$RAM_DATA + $$RAM_BSS) * 100.0) / $$TOTAL_RAM}") $$TOTAL_RAM'

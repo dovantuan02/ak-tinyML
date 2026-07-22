@@ -49,7 +49,7 @@ enum MotionClass
     End
 };
 
-static const char *label[MotionClass::End] = {"Down", "Idle", "Left", "Right", "Unknown", "Up"};
+extern const char *label[MotionClass::End];
 
 class MotionDirectInfer
 {

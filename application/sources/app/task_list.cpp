@@ -50,7 +50,7 @@ const task_t app_task_table[] = {
 	{AK_TASK_EOT_ID				,	TASK_PRI_LEVEL_0	,	(pf_task)0			}
 };
 
-const task_polling_t app_task_polling_table[] = {
+task_polling_t app_task_polling_table[] = {
 	{AC_TASK_POLLING_ZIGBEE_ID	,	AK_ENABLE	,	task_polling_zigbee			},
 	#if defined TASK_SHELL_EN
 	{AC_TASK_POLLING_CONSOLE_ID	,	AK_ENABLE	,	task_polling_console		},
